@@ -3,6 +3,10 @@ mod catalog;
 pub use catalog::ITEMS;
 mod geometry;
 use geometry::*;
+mod icons;
+use icons::Icon;
+mod patterns;
+use patterns::Pattern;
 
 use crate::model::{Project, TextLayout, Widget, WidgetKind};
 
@@ -13,15 +17,27 @@ pub enum Category {
     Markup,
     Flow,
     Icons,
+    Patterns,
 }
 impl Category {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Basic,
         Self::Forms,
         Self::Markup,
         Self::Flow,
         Self::Icons,
+        Self::Patterns,
     ];
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Basic => "basic",
+            Self::Forms => "forms",
+            Self::Markup => "markup",
+            Self::Flow => "flow",
+            Self::Icons => "icons",
+            Self::Patterns => "patterns",
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Basic => "基本元件",
@@ -29,6 +45,7 @@ impl Category {
             Self::Markup => "标注",
             Self::Flow => "流程图",
             Self::Icons => "常用图标",
+            Self::Patterns => "界面组合",
         }
     }
 }
@@ -50,7 +67,8 @@ enum Preset {
     Table,
     Menu(bool),
     Tree,
-    Icon(&'static str),
+    Icon(Icon),
+    Pattern(Pattern),
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LibraryItem {
@@ -63,6 +81,9 @@ pub struct LibraryItem {
 
 impl LibraryItem {
     pub fn matches(self, query: &str) -> bool {
+        if query.trim().is_empty() {
+            return true;
+        }
         let haystack = format!("{} {} {}", self.label, self.keywords, self.id).to_lowercase();
         query
             .split_whitespace()
@@ -73,6 +94,14 @@ impl LibraryItem {
             Preset::Kind(kind) => kind,
             Preset::Heading(_) | Preset::Paragraph | Preset::Link => WidgetKind::Text,
             _ => WidgetKind::Rectangle,
+        }
+    }
+    /// Normalized paths for tiles that depict an editable vector silhouette.
+    pub fn preview_contours(self) -> Vec<(Vec<[f32; 2]>, bool)> {
+        match self.preset {
+            Preset::Shape(name) => crate::shape_geometry::contours_from_points(&shape(name)),
+            Preset::Icon(icon) => icon.contours(),
+            _ => Vec::new(),
         }
     }
     pub fn create(self, project: &mut Project, x: f32, y: f32) -> Vec<Widget> {
@@ -235,17 +264,18 @@ impl LibraryItem {
                     widget.text.clear();
                 }
             }
-            Preset::Icon(name) => {
+            Preset::Icon(icon) => {
                 widget.width = 32.0;
                 widget.height = 32.0;
                 widget.fill = "#FFFFFF00".into();
                 widget.stroke = "#243047".into();
                 widget.radius = 0.0;
-                widget.vector_points = Some(icon(name));
+                widget.vector_points = Some(icon.vector_points());
             }
             Preset::Table | Preset::Menu(_) | Preset::Tree => {
                 return self.composite(project, widget);
             }
+            Preset::Pattern(pattern) => return pattern.create(project, widget, self.label),
         }
         vec![widget]
     }

@@ -45,14 +45,12 @@ pub(super) fn setup_style(ctx: &egui::Context) {
     };
     style.visuals.override_text_color = Some(INK);
     style.visuals.panel_fill = Color32::WHITE;
-    style.visuals.selection.bg_fill = Color32::from_rgb(239, 233, 255);
-    style.visuals.selection.stroke = Stroke::new(1.0, PURPLE);
+    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER);
+    // Keep native egui selection, caret and interaction colors. Brand colors
+    // belong to explicit product actions, not ordinary editing feedback.
     style.visuals.widgets.inactive.bg_fill = Color32::from_rgb(247, 247, 251);
     style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(247, 247, 251);
     style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, BORDER);
-    style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(240, 235, 255);
-    style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(240, 235, 255);
-    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, PURPLE);
     style.spacing.item_spacing = vec2(7.0, 7.0);
     style.spacing.button_padding = vec2(10.0, 6.0);
     style.spacing.interact_size = vec2(30.0, 29.0);
@@ -68,4 +66,69 @@ pub(super) fn setup_style(ctx: &egui::Context) {
         .insert(egui::TextStyle::Small, FontId::proportional(11.0));
     ctx.set_theme(egui::Theme::Light);
     ctx.set_style_of(egui::Theme::Light, style);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_editing_feedback_uses_framework_defaults_not_brand_colors() {
+        let context = egui::Context::default();
+        setup_style(&context);
+        let actual = context.style();
+        let defaults = egui::Visuals::light();
+        assert_eq!(actual.visuals.selection, defaults.selection);
+        assert_eq!(actual.visuals.text_cursor, defaults.text_cursor);
+        assert_eq!(actual.visuals.widgets.hovered, defaults.widgets.hovered);
+        assert_eq!(actual.visuals.hyperlink_color, defaults.hyperlink_color);
+        assert_eq!(actual.visuals.override_text_color, Some(INK));
+        assert_ne!(actual.visuals.selection.stroke.color, PURPLE);
+    }
+
+    #[test]
+    fn selected_text_is_painted_with_default_selection_colors() {
+        let context = egui::Context::default();
+        setup_style(&context);
+        let editor = egui::Id::new("theme-selection-regression");
+        let mut text = "页面和图层".to_owned();
+        let render = |text: &mut String| {
+            context.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.add(egui::TextEdit::singleline(text).id(editor));
+                });
+            })
+        };
+        render(&mut text);
+        context.memory_mut(|memory| memory.request_focus(editor));
+        let mut state = egui::TextEdit::load_state(&context, editor).unwrap();
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(text.chars().count()),
+            )));
+        state.store(&context, editor);
+        let output = render(&mut text);
+        let defaults = egui::Visuals::light().selection;
+        let galley = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text) if text.galley.text() == "页面和图层" => {
+                    Some(&text.galley)
+                }
+                _ => None,
+            })
+            .expect("selected editor text was painted");
+        let colors = galley
+            .rows
+            .iter()
+            .flat_map(|row| row.visuals.mesh.vertices.iter().map(|vertex| vertex.color))
+            .collect::<Vec<_>>();
+        assert!(colors.contains(&defaults.bg_fill));
+        assert!(colors.contains(&defaults.stroke.color));
+        assert!(!colors.contains(&PURPLE));
+        assert!(!colors.contains(&Color32::from_rgb(239, 233, 255)));
+    }
 }

@@ -1,11 +1,18 @@
+mod ai_reveal;
+mod ai_workbench;
 mod arrange;
 mod canvas;
 mod dialog_style;
+#[cfg(test)]
+mod dialog_tests;
 mod dialogs;
 mod document;
 mod editing;
+mod embedded_preview;
 mod file_open;
 mod keyboard;
+mod layers;
+mod library;
 mod preview;
 mod shell;
 mod startup;
@@ -18,7 +25,7 @@ use theme::setup_style;
 
 use base64::Engine;
 use eframe::egui::{
-    self, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Vec2, vec2,
+    self, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, vec2,
 };
 use rpshop::manipulation::{self, Handle};
 use rpshop::model::{Action, Page, Project, Widget, WidgetKind};
@@ -28,6 +35,9 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+
+#[cfg(test)]
+use eframe::egui::Vec2;
 
 const PURPLE: Color32 = Color32::from_rgb(117, 83, 222);
 const INK: Color32 = Color32::from_rgb(41, 43, 58);
@@ -90,6 +100,8 @@ struct Session {
     import_warnings: Vec<String>,
     #[serde(default)]
     native_state: Option<serde_json::Value>,
+    #[serde(default)]
+    ai_document_id: String,
 }
 
 struct OpenedDocument {
@@ -162,6 +174,16 @@ fn restore_native_context(
         {
             let raw = &raw_pages[index];
             let draft_page = &mut migrated_draft.pages[index];
+            if raw.get("group_names").is_none() {
+                page.group_names = source.group_names.clone();
+                for (id, name) in &source.group_names {
+                    draft_page
+                        .group_names
+                        .entry(*id)
+                        .or_insert_with(|| name.clone());
+                }
+                draft_page.prune_group_names();
+            }
             // Before 0.4.1 native dimensions were a preview fallback. Only
             // upgrade metadata absent from that baseline, preserving draft edits.
             if raw.get("canvas").is_none() {
@@ -246,6 +268,8 @@ fn load_document(path: &std::path::Path) -> anyhow::Result<OpenedDocument> {
 }
 
 pub struct App {
+    ai: ai_workbench::Workbench,
+    ai_reveal: ai_reveal::DesignReveal,
     project: Project,
     saved: Project,
     page: usize,
@@ -253,7 +277,9 @@ pub struct App {
     path: Option<PathBuf>,
     undo: Vec<Project>,
     redo: Vec<Project>,
-    clipboard: Vec<Widget>,
+    clipboard: editing::ComponentClipboard,
+    expanded_layer_groups: BTreeSet<u64>,
+    layer_name_dialog: Option<layers::NameDialog>,
     zoom: f32,
     view: CanvasView,
     sidebar_layout: sidebar::SidebarLayout,
@@ -263,7 +289,7 @@ pub struct App {
     tab: usize,
     tool: Option<WidgetKind>,
     drag: Option<Drag>,
-    pending_widget: Option<LibraryItem>,
+    pending_widget: Option<library::LibraryDrag>,
     library_query: String,
     library_category: Option<Category>,
     browser_preview: Option<rpshop::preview::PreviewServer>,
@@ -286,8 +312,10 @@ pub struct App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.poll_shell_open(ctx);
+        self.poll_ai(ctx);
+        self.ai_handle_image_input(ctx);
         ctx.options_mut(|options| options.zoom_with_keyboard = false);
         self.frames += 1;
         for event in ctx.input(|i| i.events.clone()) {
@@ -306,11 +334,16 @@ impl eframe::App for App {
                 ) {
                     eprintln!("截图失败: {e}");
                 }
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                if !std::env::args().any(|arg| arg == "--qa-interactive") {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             }
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if self.layer_name_dialog.is_none()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
             self.view.panning = None;
+            self.pending_widget = None;
             if let Some(drag) = self.drag.take() {
                 self.project = drag.before;
                 self.publish_preview();
@@ -318,7 +351,19 @@ impl eframe::App for App {
             self.editing = None;
             self.tool = None;
         }
-        if self.confirm.is_none() && self.editing.is_none() {
+        if self.pending_widget.is_some()
+            && ctx.input(|i| {
+                !i.focused || (!i.pointer.primary_down() && !i.pointer.primary_released())
+            })
+        {
+            self.pending_widget = None;
+        }
+        if self.confirm.is_none()
+            && self.editing.is_none()
+            && self.layer_name_dialog.is_none()
+            && !self.ai_modal_active()
+            && !self.ai_page_overview_visible()
+        {
             self.viewport_shortcuts(ctx);
             self.keyboard(ctx);
         }
@@ -365,13 +410,31 @@ impl eframe::App for App {
                             .size(11.0)
                             .color(MUTED),
                         );
+                        self.ai_overview_return_button(ui);
                     });
                 });
             });
+        self.activity_bars(ctx);
         self.left_panel(ctx);
-        self.inspector(ctx);
+        if self.ai.visible {
+            self.ai_chat_panel(ctx);
+        } else if self.sidebar_layout.inspector_open {
+            self.inspector(ctx);
+        }
         self.load_textures(ctx);
-        self.canvas(ctx);
+        if self.ai_page_overview_visible() {
+            self.pending_widget = None;
+            self.ai_page_overview(ctx);
+        } else {
+            self.canvas(ctx);
+        }
+        self.ai_artifact_window(ctx, frame);
+        self.ai_settings(ctx);
+        self.ai_permissions(ctx);
+        self.ai_full_permission_dialog(ctx);
+        self.ai_image_preview(ctx);
+        self.ai_palette_dialog(ctx);
+        self.show_layer_name_dialog(ctx);
         self.dialogs(ctx);
         #[cfg(target_os = "windows")]
         window_chrome::paint_border(ctx);
@@ -396,6 +459,15 @@ impl eframe::App for App {
             }
             self.last_recovery = Instant::now();
         }
+        if std::env::args().any(|arg| arg == "--qa-interactive")
+            && self.screenshot_mode
+            && let Ok(path) = std::env::var("RPSHOP_QA_CAPTURE_REQUEST")
+            && let Ok(destination) = std::fs::read_to_string(&path)
+        {
+            self.screenshot = Some(PathBuf::from(destination.trim()));
+            let _ = std::fs::remove_file(path);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+        }
         if self.frames == 5 && self.screenshot.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
         }
@@ -414,6 +486,7 @@ impl eframe::App for App {
                     saved: self.saved.clone(),
                     import_warnings: self.import_warnings.clone(),
                     native_state: self.native.as_ref().map(|n| n.session_state()),
+                    ai_document_id: self.ai_document_identity(),
                 },
             );
         }
@@ -537,111 +610,6 @@ fn layer_control(ui: &mut egui::Ui, control: LayerControl, name: &str) -> egui::
         }
     }
     response.on_hover_text(label)
-}
-
-fn library_button(ui: &mut egui::Ui, item: LibraryItem) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(59.0, 56.0), Sense::click_and_drag());
-    if !ui.is_rect_visible(rect) {
-        return response;
-    }
-    let p = ui.painter();
-    p.rect(
-        rect,
-        4.0,
-        if response.hovered() {
-            Color32::from_rgb(240, 235, 255)
-        } else {
-            Color32::from_rgb(248, 248, 252)
-        },
-        Stroke::new(1.0, BORDER),
-        StrokeKind::Inside,
-    );
-    let icon = Rect::from_center_size(rect.center_top() + vec2(0.0, 19.0), vec2(25.0, 20.0));
-    if matches!(item.kind(), WidgetKind::Text) {
-        let symbol = match item.id {
-            "heading1" => "H1",
-            "heading2" => "H2",
-            "heading3" => "H3",
-            "paragraph" => "¶",
-            "link" => "↗",
-            _ => "T",
-        };
-        p.text(
-            icon.center(),
-            Align2::CENTER_CENTER,
-            symbol,
-            FontId::proportional(18.0),
-            INK,
-        );
-    } else if matches!(
-        item.id,
-        "table" | "horizontal-menu" | "vertical-menu" | "tree"
-    ) {
-        p.rect_stroke(icon, 1.0, Stroke::new(1.2, INK), StrokeKind::Inside);
-        for i in 1..3 {
-            let fraction = i as f32 / 3.0;
-            p.line_segment(
-                [
-                    icon.min + vec2(0.0, icon.height() * fraction),
-                    icon.min + vec2(icon.width(), icon.height() * fraction),
-                ],
-                Stroke::new(1.0, INK),
-            );
-            if item.id == "table" || item.id == "horizontal-menu" {
-                p.line_segment(
-                    [
-                        icon.min + vec2(icon.width() * fraction, 0.0),
-                        icon.min + vec2(icon.width() * fraction, icon.height()),
-                    ],
-                    Stroke::new(1.0, INK),
-                );
-            }
-        }
-    } else {
-        let mut project = Project::blank();
-        let mut preview = item.create(&mut project, 0.0, 0.0).remove(0);
-        let scale = (icon.width() / preview.width).min(icon.height() / preview.height);
-        let size = if matches!(preview.kind, WidgetKind::Checkbox | WidgetKind::Radio) {
-            vec2(18.0, 18.0)
-        } else {
-            vec2(preview.width, preview.height) * scale
-        };
-        preview.width = size.x;
-        preview.height = size.y;
-        preview.radius *= scale;
-        preview.text.clear();
-        preview.fill = if item.id == "button" {
-            "#E9E2FD"
-        } else {
-            "#FFFFFF00"
-        }
-        .into();
-        preview.stroke = "#292B3A".into();
-        if preview.kind == WidgetKind::Line {
-            let points = rpshop::vector_edit::line_endpoints(&preview)
-                .map(|point| icon.center() - size / 2.0 + vec2(point[0], point[1]));
-            p.line_segment(points, Stroke::new(1.3, INK));
-        } else {
-            draw_widget(p, &preview, icon.center() - size / 2.0, 1.0, None);
-        }
-    }
-    let label_font = if item.label.chars().count() > 5 {
-        10.0
-    } else {
-        12.0
-    };
-    p.text(
-        rect.center_bottom() - vec2(0.0, 12.0),
-        Align2::CENTER_CENTER,
-        item.label,
-        FontId::proportional(label_font),
-        INK,
-    );
-    response.on_hover_text(format!(
-        "{} · {}\n点击添加，或拖入画布",
-        item.label,
-        item.category.label()
-    ))
 }
 
 fn action_label(action: Action) -> &'static str {

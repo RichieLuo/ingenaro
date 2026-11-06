@@ -118,6 +118,7 @@ fn native_groups_wrap_existing_layers_and_preserve_opaque_tables() {
             widget.groups.insert(0, 301);
         }
     }
+    crate::grouping::rename_group(&mut after, 301, "页面导航").unwrap();
     patch_native_groups(
         &mut parts,
         &package,
@@ -137,10 +138,13 @@ fn native_groups_wrap_existing_layers_and_preserve_opaque_tables() {
         &BTreeMap::new(),
     )
     .unwrap();
+    let existing_group = raw_id(&groups[&300].object);
+    patch_native_group_name(parts.get_mut(&10).unwrap(), existing_group, "组内元素").unwrap();
     let graph = &parts[&10];
     let root = array(&graph.node(&format!("{:032x}", 102)).unwrap().properties["diagram-objects"]);
     let group = graph.resolve(&root[0]).unwrap();
     assert!(group.kind.ends_with(":Layer"));
+    assert_eq!(group.properties["name-block"]["text"], "页面导航");
     assert_eq!(
         reference_id(&group.properties["DiagramObjects"][0]),
         Some(format!("{:032x}", 1).as_str())
@@ -158,10 +162,26 @@ fn native_groups_wrap_existing_layers_and_preserve_opaque_tables() {
         17
     );
     let bytes = binary::encode(graph).unwrap();
-    assert_eq!(
-        binary::encode(&binary::parse(&bytes).unwrap()).unwrap(),
-        bytes
-    );
+    let reopened = binary::parse(&bytes).unwrap();
+    assert_eq!(binary::encode(&reopened).unwrap(), bytes);
+    let roots = BTreeMap::from([(package.clone(), format!("{:032x}", 101))]);
+    let styles = Styles::new(&reopened);
+    let mut converter = Converter {
+        graph: &reopened,
+        roots: &roots,
+        styles: &styles,
+        next_id: 1,
+        warnings: BTreeMap::new(),
+        pending_links: Vec::new(),
+        bindings: BTreeMap::new(),
+        preview_parents: BTreeMap::new(),
+        group_bindings: BTreeMap::new(),
+    };
+    let imported = converter.page(&package, "Roundtrip").unwrap();
+    let groups = &imported.widgets[1].groups;
+    assert_eq!(groups.len(), 2);
+    assert_eq!(imported.group_name(groups[0]), "页面导航");
+    assert_eq!(imported.group_name(groups[1]), "组内元素");
 }
 
 #[test]

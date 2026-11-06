@@ -191,6 +191,26 @@ impl NativeDocument {
                     &self.preview_parents,
                 )?;
             }
+            for (id, name) in &page.group_names {
+                let Some(binding) = self.group_bindings.get(id) else {
+                    continue; // New groups are named when writing their source objects.
+                };
+                if old.group_names.get(id) == Some(name) {
+                    continue;
+                }
+                ensure!(
+                    old.widgets.iter().any(|widget| {
+                        widget.groups.contains(id) && self.bindings.contains_key(&widget.id)
+                    }),
+                    "只读母版预览中的分组暂不支持重命名"
+                );
+                let offset = owners.get(&binding.object).context("原生分组部件丢失")?;
+                patch_native_group_name(
+                    parts.get_mut(offset).unwrap(),
+                    raw_id(&binding.object),
+                    name,
+                )?;
+            }
         }
         super::native_events::patch(
             parts,

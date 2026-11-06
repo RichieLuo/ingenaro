@@ -143,6 +143,17 @@ pub(crate) fn validate_page(page: &Page) -> Result<()> {
                 .with_context(|| format!("元件「{}」的矢量路径无效", widget.name))?;
         }
     }
+    if !page.group_names.is_empty() {
+        let groups = page
+            .widgets
+            .iter()
+            .flat_map(|w| &w.groups)
+            .collect::<HashSet<_>>();
+        for (id, name) in &page.group_names {
+            ensure!(groups.contains(id), "当前页面不存在分组 {id}");
+            crate::grouping::validate_group_name(name)?;
+        }
+    }
     Ok(())
 }
 

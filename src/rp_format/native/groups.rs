@@ -153,6 +153,7 @@ pub(super) fn new_native_group(
     graph: &mut Graph,
     diagram: &str,
     children: Vec<Value>,
+    name: &str,
 ) -> Result<String> {
     let id = guid();
     let style_id = guid();
@@ -177,7 +178,7 @@ pub(super) fn new_native_group(
         replace_reference(&mut node.properties, &template_id, &id);
     }
     node.properties["DiagramObjects"] = Value::Array(children);
-    node.properties["name-block"] = json!({"*type":"text-block","text":"组合","property-dictionary":{
+    node.properties["name-block"] = json!({"*type":"text-block","text":name,"property-dictionary":{
         "type":"label","diagram-object-id":{"$guid":id},"parent-diagram-id":{"$guid":diagram}}});
     node.properties["MyStyle"] = json!({"$ref":style_id,"$token":3});
     node.properties["Annotation"] = json!({"$ref":EMPTY_ID,"$token":3});
@@ -212,13 +213,15 @@ pub(super) fn write_group_entries(
     entries: &[NativeGroupEntry],
     groups: &BTreeMap<u64, GroupBinding>,
     references: &BTreeMap<u64, Value>,
+    page: &Page,
 ) -> Result<Vec<Value>> {
     let mut result = Vec::with_capacity(entries.len());
     for entry in entries {
         match entry {
             NativeGroupEntry::Object(reference) => result.push(reference.clone()),
             NativeGroupEntry::Group(group, children) => {
-                let children = write_group_entries(graph, diagram, children, groups, references)?;
+                let children =
+                    write_group_entries(graph, diagram, children, groups, references, page)?;
                 if let Some(binding) = groups.get(group) {
                     let node = graph
                         .objects
@@ -227,13 +230,27 @@ pub(super) fn write_group_entries(
                     node.properties["DiagramObjects"] = Value::Array(children);
                     result.push(references.get(group).context("原生组父引用丢失")?.clone());
                 } else {
-                    let id = new_native_group(graph, diagram, children)?;
+                    let id = new_native_group(graph, diagram, children, &page.group_name(*group))?;
                     result.push(json!({"$ref":id,"$token":3}));
                 }
             }
         }
     }
     Ok(result)
+}
+
+pub(super) fn patch_native_group_name(graph: &mut Graph, object: &str, name: &str) -> Result<()> {
+    let node = graph.objects.get_mut(object).context("原生分组对象丢失")?;
+    let label = &mut node.properties["name-block"];
+    if label.is_null() {
+        *label = json!({"*type":"text-block","text":name,"property-dictionary":{
+            "type":"label","diagram-object-id":{"$guid":object}
+        }});
+    } else {
+        ensure!(label.is_object(), "无法识别原生分组名称结构");
+        label["text"] = json!(name);
+    }
+    Ok(())
 }
 
 pub(super) fn patch_native_groups(
@@ -342,7 +359,14 @@ pub(super) fn patch_native_groups(
     preserve_unmapped_group_atoms(graph, &direct, &metadata, &atoms, &mut entries)?;
     drop(projection);
     let graph = parts.get_mut(&offset).unwrap();
-    let references = write_group_entries(graph, &diagram, &entries, groups, &metadata.references)?;
+    let references = write_group_entries(
+        graph,
+        &diagram,
+        &entries,
+        groups,
+        &metadata.references,
+        page,
+    )?;
     let references =
         rebuild_diagram_registry(graph, &original_registry, &members_before, &references)?;
     graph.objects.get_mut(&diagram).unwrap().properties["diagram-objects"] =

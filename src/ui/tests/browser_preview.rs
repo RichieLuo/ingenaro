@@ -39,6 +39,7 @@ fn request(url: &str) -> String {
 fn f5_opens_current_page_in_browser_and_editor_remains_editable() {
     let mut app = fixture(Project::default());
     app.page = 1;
+    app.sidebar_layout.active = Some(sidebar::LeftPane::Library);
     let original = app.project.clone();
     let ctx = egui::Context::default();
     frame(&mut app, &ctx, vec![]);

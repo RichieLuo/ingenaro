@@ -83,9 +83,13 @@ pub fn svg_paths(widget: &Widget) -> Option<Vec<String>> {
 /// Bounded flattened contours for the canvas. Existing imported image widgets
 /// continue to use their retained image, including complex multi-contour icons.
 pub fn contours(widget: &Widget) -> Vec<(Vec<[f32; 2]>, bool)> {
-    let Some(value) = &widget.vector_points else {
-        return Vec::new();
-    };
+    widget
+        .vector_points
+        .as_ref()
+        .map_or_else(Vec::new, contours_from_points)
+}
+
+pub(crate) fn contours_from_points(value: &Value) -> Vec<(Vec<[f32; 2]>, bool)> {
     if crate::vector_edit::validate_points(value).is_err() {
         return Vec::new();
     }

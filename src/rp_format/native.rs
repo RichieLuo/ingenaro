@@ -98,6 +98,7 @@ impl NativeDocument {
             .map(|widget| (widget.id, widget.clone()))
             .collect::<BTreeMap<_, _>>();
         for page in &mut project.pages {
+            let count = page.widgets.len();
             page.widgets.retain(|widget| {
                 self.preview_parents
                     .get(&widget.id)
@@ -113,6 +114,9 @@ impl NativeDocument {
                     continue;
                 };
                 *widget = transform_preview(previous, old_parent, new_parent);
+            }
+            if page.widgets.len() != count {
+                page.prune_group_names();
             }
         }
     }
@@ -133,6 +137,12 @@ impl NativeDocument {
     pub fn preview_scene(&self, edited: &Project) -> Result<super::preview_scene::NativePreview> {
         edited.validate()?;
         if self.library {
+            // Gallery rendering is static, but automation still requires the same
+            // source-dependent writeback checks as a native save, without writing.
+            if edited != &self.baseline {
+                let mut staged = self.parts.clone();
+                self.patch_project(edited, &mut staged)?;
+            }
             return Ok(super::preview_scene::NativePreview {
                 scene: super::preview_scene::PreviewScene {
                     diagnostics: vec!["组件库预览展示静态组件，暂不执行库内原生交互".into()],

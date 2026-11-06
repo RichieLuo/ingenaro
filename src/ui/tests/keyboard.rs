@@ -13,6 +13,47 @@ fn component_clipboard(output: &egui::FullOutput) -> String {
 }
 
 #[test]
+fn system_clipboard_remaps_names_of_nested_groups_on_paste() {
+    let mut project = Project::blank();
+    let first = add(&mut project, WidgetKind::Text, 30.0, 30.0);
+    let second = add(&mut project, WidgetKind::Text, 50.0, 50.0);
+    let third = add(&mut project, WidgetKind::Text, 70.0, 70.0);
+    let (inner, _) = rpshop::grouping::group_named(
+        &mut project,
+        0,
+        &BTreeSet::from([first, second]),
+        Some("Inner"),
+    )
+    .unwrap();
+    let (outer, selected) = rpshop::grouping::group_named(
+        &mut project,
+        0,
+        &BTreeSet::from([first, third]),
+        Some("Outer"),
+    )
+    .unwrap();
+    let mut app = fixture(project);
+    app.selected = selected;
+    let ctx = egui::Context::default();
+    let copied = frame(&mut app, &ctx, vec![egui::Event::Copy]);
+    let clipboard = component_clipboard(&copied);
+    assert!(clipboard.starts_with("RPShop.components.v2\n"));
+
+    let mut target = fixture(app.project.clone());
+    let ctx = egui::Context::default();
+    frame(&mut target, &ctx, vec![egui::Event::Paste(clipboard)]);
+    let page = &target.project.pages[0];
+    let [copied_outer, copied_inner] = page.widgets[3].groups.as_slice() else {
+        panic!("nested group path did not survive paste");
+    };
+    assert_ne!(*copied_outer, outer);
+    assert_ne!(*copied_inner, inner);
+    assert_eq!(page.group_name(*copied_outer), "Outer");
+    assert_eq!(page.group_name(*copied_inner), "Inner");
+    target.project.validate().unwrap();
+}
+
+#[test]
 fn native_clipboard_events_copy_and_paste_across_app_instances() {
     let mut project = Project::blank();
     let id = add(&mut project, WidgetKind::Button, 80.0, 80.0);
@@ -56,8 +97,8 @@ fn native_cut_preserves_locked_widgets_and_is_one_undo_transaction() {
     let output = frame(&mut app, &ctx, vec![egui::Event::Cut]);
     let clipboard = component_clipboard(&output);
     assert!(clipboard.starts_with("RPShop.components.v1\n"));
-    assert_eq!(app.clipboard.len(), 1);
-    assert_eq!(app.clipboard[0].id, movable);
+    assert_eq!(app.clipboard.widgets.len(), 1);
+    assert_eq!(app.clipboard.widgets[0].id, movable);
     assert_eq!(app.project.pages[0].widgets.len(), 1);
     assert_eq!(app.project.pages[0].widgets[0].id, locked);
     assert_eq!(app.undo.len(), 1);
@@ -139,7 +180,7 @@ fn focused_text_edit_keeps_clipboard_delete_tools_and_undo_events() {
         },
     );
     assert_eq!(app.project, original);
-    assert!(app.clipboard.is_empty());
+    assert!(app.clipboard.widgets.is_empty());
     assert!(app.undo.is_empty());
     assert!(app.tool.is_none());
 }
@@ -180,7 +221,7 @@ fn external_text_and_invalid_component_payload_never_paste_stale_widgets() {
         "ordinary external text".to_owned(),
         "RPShop.components.v1\n[{}]".to_owned(),
         {
-            let mut bad = app.clipboard[0].clone();
+            let mut bad = app.clipboard.widgets[0].clone();
             bad.width = -1.0;
             format!(
                 "RPShop.components.v1\n{}",
@@ -300,6 +341,6 @@ fn native_copy_event_with_control_alt_aligns_center_instead_of_copying() {
         app.project.pages[0].widgets[1].x
     );
     assert_eq!(app.undo.len(), 1);
-    assert!(app.clipboard.is_empty());
+    assert!(app.clipboard.widgets.is_empty());
     assert!(output.platform_output.commands.is_empty());
 }

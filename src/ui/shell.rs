@@ -217,6 +217,9 @@ impl App {
     }
 
     pub(super) fn left_panel(&mut self, ctx: &egui::Context) {
+        let Some(active) = self.sidebar_layout.active else {
+            return;
+        };
         egui::SidePanel::left("navigator")
             .resizable(true)
             .default_width(225.0)
@@ -226,10 +229,28 @@ impl App {
                 if self.confirm.is_some() || self.editing.is_some() {
                     ui.disable();
                 }
-                let rects = self.sidebar_layout.show(ui);
-                self.pages_pane(&mut sidebar::pane(ui, rects.panes[0], "pages-pane"));
-                self.library_pane(&mut sidebar::pane(ui, rects.panes[1], "library-pane"));
-                self.layers_pane(&mut sidebar::pane(ui, rects.panes[2], "layers-pane"));
+                ui.horizontal(|ui| {
+                    let title = match active {
+                        sidebar::LeftPane::Pages => RichText::new("目录").size(11.0).color(MUTED),
+                        sidebar::LeftPane::Library => RichText::new("组件库").size(17.0).strong(),
+                        sidebar::LeftPane::Layers => RichText::new("图层").size(11.0).color(MUTED),
+                    };
+                    ui.label(title);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("×").on_hover_text("收起侧栏").clicked() {
+                            self.sidebar_layout.active = None;
+                        }
+                    });
+                });
+                if active != sidebar::LeftPane::Library {
+                    ui.separator();
+                    ui.add_space(8.0);
+                }
+                match active {
+                    sidebar::LeftPane::Pages => self.pages_pane(ui),
+                    sidebar::LeftPane::Library => self.library_pane(ui),
+                    sidebar::LeftPane::Layers => self.layers_pane(ui),
+                }
             });
     }
 
@@ -254,6 +275,7 @@ impl App {
                         canvas: rpshop::model::CanvasMode::Fixed,
                         background: "#FFFFFF".into(),
                         widgets: vec![],
+                        group_names: Default::default(),
                     });
                     if !self.project.page_tree.is_empty() {
                         self.project
@@ -295,217 +317,6 @@ impl App {
             self.page = self.page.min(self.project.pages.len() - 1);
             self.selected.clear();
         }
-    }
-
-    pub(super) fn library_pane(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("组件库").strong().size(14.0));
-            ui.label(
-                RichText::new(widget_library::ITEMS.len().to_string())
-                    .small()
-                    .color(MUTED),
-            );
-        });
-        ui.label(
-            RichText::new("点击添加，或拖入画布")
-                .size(11.0)
-                .color(MUTED),
-        );
-        ui.add_space(4.0);
-        ui.add(
-            egui::TextEdit::singleline(&mut self.library_query)
-                .id_salt("library-search")
-                .hint_text("搜索元件…")
-                .desired_width(f32::INFINITY),
-        );
-        egui::ComboBox::from_id_salt("library-category")
-            .selected_text(self.library_category.map_or("全部元件", Category::label))
-            .width(ui.available_width() - 8.0)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.library_category, None, "全部元件");
-                for category in Category::ALL {
-                    ui.selectable_value(
-                        &mut self.library_category,
-                        Some(category),
-                        category.label(),
-                    );
-                }
-            });
-        ui.add_space(4.0);
-        egui::ScrollArea::vertical()
-            .id_salt("library-scroll")
-            .auto_shrink([false, false])
-            .max_height(ui.available_height())
-            .show(ui, |ui| {
-                let columns = ((ui.available_width() + 5.0) / 64.0)
-                    .floor()
-                    .clamp(1.0, 3.0) as usize;
-                let mut found = false;
-                for category in Category::ALL {
-                    if self
-                        .library_category
-                        .is_some_and(|selected| selected != category)
-                    {
-                        continue;
-                    }
-                    let items: Vec<_> = widget_library::ITEMS
-                        .iter()
-                        .copied()
-                        .filter(|item| {
-                            item.category == category && item.matches(&self.library_query)
-                        })
-                        .collect();
-                    if items.is_empty() {
-                        continue;
-                    }
-                    found = true;
-                    ui.label(
-                        RichText::new(format!("{}  {}", category.label(), items.len()))
-                            .size(11.0)
-                            .color(MUTED),
-                    );
-                    egui::Grid::new(("library", category.label()))
-                        .num_columns(columns)
-                        .spacing([5.0, 6.0])
-                        .show(ui, |ui| {
-                            for (i, item) in items.into_iter().enumerate() {
-                                let r = library_button(ui, item);
-                                if r.clicked() {
-                                    self.add_library_item(
-                                        item,
-                                        64.0 + (self.project.pages[self.page].widgets.len() % 6)
-                                            as f32
-                                            * 16.0,
-                                        80.0,
-                                    );
-                                }
-                                if r.drag_started() {
-                                    self.pending_widget = Some(item);
-                                }
-                                if i % columns == columns - 1 {
-                                    ui.end_row();
-                                }
-                            }
-                        });
-                    ui.add_space(8.0);
-                }
-                if !found {
-                    ui.label(RichText::new("没有匹配的元件").color(MUTED));
-                }
-            });
-    }
-
-    pub(super) fn layers_pane(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = LAYER_COLUMN_SPACING;
-            let title_width = layer_title_width(ui.available_width());
-            ui.allocate_ui_with_layout(
-                vec2(title_width, 22.0),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.set_min_width(title_width);
-                    ui.label(RichText::new("图层").strong().size(14.0));
-                    ui.label(
-                        RichText::new(self.project.pages[self.page].widgets.len().to_string())
-                            .small()
-                            .color(MUTED),
-                    );
-                },
-            );
-            ui.add_sized(
-                [LAYER_CONTROL_WIDTH, 22.0],
-                egui::Label::new(RichText::new("显示").size(11.0).color(MUTED)),
-            )
-            .on_hover_text("眼睛控制组件在画布和预览中的显示；隐藏不会删除组件。");
-            ui.add_sized(
-                [LAYER_CONTROL_WIDTH, 22.0],
-                egui::Label::new(RichText::new("锁定").size(11.0).color(MUTED)),
-            )
-            .on_hover_text("锁定后不能移动、缩放或修改组件；点击开锁即可恢复编辑。");
-        });
-        ui.label(
-            RichText::new("眼睛控制显示，锁控制编辑")
-                .size(11.0)
-                .color(MUTED),
-        );
-        ui.add_space(8.0);
-        egui::ScrollArea::vertical()
-            .id_salt("layers")
-            .auto_shrink([false, false])
-            .max_height(ui.available_height())
-            .show(ui, |ui| {
-                let mut layer_hit = None;
-                for widget in self.project.pages[self.page].widgets.iter_mut().rev() {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = LAYER_COLUMN_SPACING;
-                        let title_width = layer_title_width(ui.available_width());
-                        let r = ui
-                            .add_sized(
-                                [title_width, 27.0],
-                                egui::Button::selectable(
-                                    self.selected.contains(&widget.id),
-                                    format!(
-                                        "{} {}",
-                                        if widget.kind == WidgetKind::Text {
-                                            "T"
-                                        } else {
-                                            "◇"
-                                        },
-                                        widget.name
-                                    ),
-                                )
-                                .truncate(),
-                            )
-                            .on_hover_text(&widget.name);
-                        if r.clicked() {
-                            layer_hit = Some((
-                                widget.id,
-                                ui.input(|i| i.modifiers.shift || i.modifiers.ctrl),
-                                ui.input(|i| i.modifiers.ctrl && i.modifiers.alt),
-                            ));
-                        }
-                        let editable = self
-                            .native
-                            .as_ref()
-                            .is_none_or(|d| d.is_editable_widget(widget.id));
-                        ui.add_enabled_ui(editable, |ui| {
-                            if layer_control(
-                                ui,
-                                LayerControl::Visibility {
-                                    hidden: widget.hidden,
-                                },
-                                &widget.name,
-                            )
-                            .clicked()
-                            {
-                                widget.hidden = !widget.hidden;
-                            }
-                            if layer_control(
-                                ui,
-                                LayerControl::Lock {
-                                    locked: widget.locked,
-                                },
-                                &widget.name,
-                            )
-                            .clicked()
-                            {
-                                widget.locked = !widget.locked;
-                            }
-                        })
-                        .response
-                        .on_hover_text(if editable {
-                            "显示与锁定"
-                        } else {
-                            "组件名称标签仅用于浏览，不属于原生组件内容"
-                        });
-                    });
-                }
-                if let Some((id, additive, inside)) = layer_hit {
-                    self.select_hit(id, additive, inside);
-                }
-            });
     }
 
     pub(super) fn inspector(&mut self, ctx: &egui::Context) {

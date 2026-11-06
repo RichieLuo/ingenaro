@@ -19,6 +19,54 @@ fn page_and_viewport(output: &egui::FullOutput, app: &App) -> (Rect, Rect) {
         .expect("the page and its canvas clipping rectangle must be painted")
 }
 
+fn ruler_strips(output: &egui::FullOutput) -> (Vec<Rect>, usize) {
+    let strips: Vec<_> = output
+        .shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, shape)| match &shape.shape {
+            egui::Shape::Rect(rect) if rect.fill == Color32::from_rgb(250, 250, 250) => {
+                Some((rect.rect, index))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        strips.len(),
+        3,
+        "top, left, and corner ruler strips must be painted"
+    );
+    (strips.iter().map(|(rect, _)| *rect).collect(), strips[0].1)
+}
+
+fn ruler_workspace(output: &egui::FullOutput) -> Rect {
+    let (strips, _) = ruler_strips(output);
+    Rect::from_min_max(
+        strips[2].min,
+        Pos2::new(strips[0].right(), strips[1].bottom()),
+    )
+}
+
+fn canvas_modes() -> [rpshop::model::CanvasMode; 4] {
+    use rpshop::model::CanvasMode;
+    [
+        CanvasMode::Fixed,
+        CanvasMode::Auto,
+        CanvasMode::FixedWidth,
+        CanvasMode::FixedHeight,
+    ]
+}
+
+fn canvas_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+    let input = egui::RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(900.0, 600.0))),
+        time: Some(0.1),
+        events,
+        ..Default::default()
+    };
+    ctx.run(input, |ctx| app.canvas(ctx))
+}
+
 fn wheel(unit: egui::MouseWheelUnit, delta: Vec2, modifiers: egui::Modifiers) -> egui::Event {
     egui::Event::MouseWheel {
         unit,
@@ -227,7 +275,7 @@ fn zoom_and_center_shortcuts_preserve_document_and_center_selection() {
         vec![key(egui::Key::Num1, egui::Modifiers::CTRL)],
     );
     let (page, viewport) = page_and_viewport(&output, &app);
-    assert!((page.center() - viewport.center()).length() < 0.01);
+    assert!((page.center() - viewport::content_rect(viewport).center()).length() < 0.01);
     let output = frame(
         &mut app,
         &ctx,
@@ -240,7 +288,7 @@ fn zoom_and_center_shortcuts_preserve_document_and_center_selection() {
             widget.x + widget.width / 2.0,
             widget.y + widget.height / 2.0,
         ) * app.zoom;
-    assert!((center - viewport.center()).length() < 0.01);
+    assert!((center - viewport::content_rect(viewport).center()).length() < 0.01);
     let fitted_zoom = app.zoom;
     app.view.pan += vec2(75.0, -48.0);
     let output = frame(
@@ -256,7 +304,7 @@ fn zoom_and_center_shortcuts_preserve_document_and_center_selection() {
             widget.x + widget.width / 2.0,
             widget.y + widget.height / 2.0,
         ) * app.zoom;
-    assert!((center - viewport.center()).length() < 0.01);
+    assert!((center - viewport::content_rect(viewport).center()).length() < 0.01);
     assert_navigation_only(&app, &project, &ctx);
 }
 
@@ -394,6 +442,266 @@ fn auto_canvas_opens_at_full_scale_and_can_reach_negative_and_far_content() {
     let _ = click(&mut app, &ctx, position);
     assert_eq!(app.selected, BTreeSet::from([id]));
     assert_navigation_only(&app, &project, &ctx);
+}
+
+#[test]
+fn all_canvas_modes_keep_rulers_fixed_and_every_canvas_pass_below_them() {
+    for mode in canvas_modes() {
+        let mut before = Project::blank();
+        before.pages[0].canvas = mode;
+        let id = add(&mut before, WidgetKind::Rectangle, 0.0, 0.0);
+        before.pages[0].widgets[0].fill = "#E12D48".into();
+        before.pages[0].widgets[0].text = "Ruler clipping sentinel".into();
+        let mut project = before.clone();
+        project.pages[0].widgets[0].width += 20.0;
+        let mut app = fixture(project.clone());
+        app.selected.insert(id);
+        app.grid = true;
+        let ctx = egui::Context::default();
+        let mut expected_strips = None;
+        for zoom in [0.1, 0.65, 1.0, 10.0] {
+            for pan in [vec2(10.0, 10.0), vec2(-60.0, -50.0), vec2(240.0, 210.0)] {
+                app.zoom = zoom;
+                app.view.pan = pan;
+                let output = canvas_frame(&mut app, &ctx, Vec::new());
+                let (strips, first_ruler) = ruler_strips(&output);
+                assert_eq!(expected_strips.get_or_insert(strips.clone()), &strips);
+                let content = viewport::content_rect(ruler_workspace(&output));
+                let mut canvas_shapes = 0;
+                for clipped in &output.shapes[..first_ruler] {
+                    // The panel background and fixed-page breadcrumb are UI, not canvas passes.
+                    if matches!(clipped.shape, egui::Shape::Noop) {
+                        continue;
+                    }
+                    if let egui::Shape::Text(text) = &clipped.shape
+                        && text.galley.text() != "Ruler clipping sentinel"
+                    {
+                        continue;
+                    }
+                    if let egui::Shape::Rect(rect) = &clipped.shape
+                        && rect.fill == Color32::from_rgb(243, 244, 248)
+                    {
+                        continue;
+                    }
+                    canvas_shapes += 1;
+                    assert!(
+                        !clipped.clip_rect.is_positive()
+                            || content.contains_rect(clipped.clip_rect),
+                        "{mode:?}: canvas clip {:?} must stay inside {content:?}",
+                        clipped.clip_rect
+                    );
+                }
+                assert!(
+                    canvas_shapes > 1,
+                    "background, grid, and selection must be exercised"
+                );
+                assert_eq!(
+                    app.view.pan, pan,
+                    "reserving rulers must not change the document origin"
+                );
+            }
+        }
+        app.zoom = 1.0;
+        app.view.pan = vec2(10.0, 10.0);
+        app.ai_reveal.record(&before, &project, 0.0);
+        let output = canvas_frame(&mut app, &ctx, Vec::new());
+        let content = viewport::content_rect(ruler_workspace(&output));
+        let (_, first_ruler) = ruler_strips(&output);
+        let status = output
+            .shapes
+            .iter()
+            .enumerate()
+            .find_map(|(index, clipped)| match &clipped.shape {
+                egui::Shape::Text(text) if text.galley.text() == "正在绘制..." => {
+                    Some((index, clipped))
+                }
+                _ => None,
+            })
+            .expect("AI reveal status must remain visible");
+        assert!(
+            status.0 < first_ruler,
+            "rulers must be painted after AI reveal"
+        );
+        assert!(content.contains_rect(status.1.clip_rect));
+        assert!(app.ai_reveal.is_active(0.1));
+        assert_navigation_only(&app, &project, &ctx);
+    }
+}
+
+#[test]
+fn ruler_pointer_gestures_cannot_select_move_draw_or_drop_widgets() {
+    for mode in canvas_modes() {
+        let mut project = Project::blank();
+        project.pages[0].canvas = mode;
+        let overlapped = add(&mut project, WidgetKind::Rectangle, 0.0, 0.0);
+        let selected = add(&mut project, WidgetKind::Ellipse, 320.0, 220.0);
+        let mut app = fixture(project.clone());
+        app.zoom = 1.0;
+        app.view.pan = vec2(0.0, 0.0);
+        app.selected.insert(selected);
+        let selection = app.selected.clone();
+        let ctx = egui::Context::default();
+        let output = frame(&mut app, &ctx, Vec::new());
+        let workspace = ruler_workspace(&output);
+        let positions = [
+            workspace.min + vec2(60.0, 9.0),
+            workspace.min + vec2(9.0, 60.0),
+            workspace.min + vec2(9.0, 9.0),
+        ];
+        for position in positions {
+            let clicked = click(&mut app, &ctx, position);
+            assert_eq!(
+                app.selected,
+                selection,
+                "{mode:?}: ruler at {position:?} in {workspace:?} (now {:?}) must not select overlapped widget {overlapped}",
+                ruler_workspace(&clicked)
+            );
+            let _ = frame(
+                &mut app,
+                &ctx,
+                vec![pointer_button(
+                    position,
+                    egui::PointerButton::Secondary,
+                    true,
+                )],
+            );
+            let _ = frame(
+                &mut app,
+                &ctx,
+                vec![pointer_button(
+                    position,
+                    egui::PointerButton::Secondary,
+                    false,
+                )],
+            );
+            assert_eq!(app.selected, selection);
+            assert!(app.editing.is_none());
+            for drawing in [false, true] {
+                if drawing {
+                    app.tool = Some(WidgetKind::Rectangle);
+                }
+                let _ = frame(
+                    &mut app,
+                    &ctx,
+                    vec![egui::Event::PointerMoved(position), pointer(position, true)],
+                );
+                let end = position + vec2(90.0, 90.0);
+                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+                assert!(app.drag.is_none());
+                let _ = frame(&mut app, &ctx, vec![pointer(end, false)]);
+                assert_eq!(app.selected, selection);
+                assert_navigation_only(&app, &project, &ctx);
+                if drawing {
+                    let _ = click(&mut app, &ctx, position);
+                    assert_eq!(
+                        app.tool,
+                        Some(WidgetKind::Rectangle),
+                        "clicking a ruler must not consume the drawing tool"
+                    );
+                    app.tool = None;
+                }
+            }
+            let _ = frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(position), pointer(position, true)],
+            );
+            app.pending_widget = Some(library::LibraryDrag::new(widget_library::ITEMS[0]));
+            let _ = frame(&mut app, &ctx, vec![pointer(position, false)]);
+            assert!(
+                app.pending_widget.is_none(),
+                "a canceled ruler drop must clear the drag preview"
+            );
+            assert_navigation_only(&app, &project, &ctx);
+        }
+    }
+}
+
+#[test]
+fn ruler_wheel_and_pan_starts_are_excluded_but_content_anchors_stay_exact() {
+    for mode in canvas_modes() {
+        let mut project = Project::blank();
+        project.pages[0].canvas = mode;
+        let mut app = fixture(project.clone());
+        let ctx = egui::Context::default();
+        let output = frame(&mut app, &ctx, Vec::new());
+        let workspace = ruler_workspace(&output);
+        let content = viewport::content_rect(workspace);
+        for position in [
+            workspace.min + vec2(60.0, 9.0),
+            workspace.min + vec2(9.0, 60.0),
+        ] {
+            let pan = app.view.pan;
+            let zoom = app.zoom;
+            for modifiers in [
+                egui::Modifiers::NONE,
+                egui::Modifiers::SHIFT,
+                egui::Modifiers::CTRL,
+            ] {
+                let _ = frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(position),
+                        wheel(egui::MouseWheelUnit::Point, vec2(0.0, 120.0), modifiers),
+                    ],
+                );
+                assert_eq!(app.view.pan, pan);
+                assert_eq!(app.zoom, zoom);
+            }
+            let _ = frame(&mut app, &ctx, vec![egui::Event::Zoom(1.5)]);
+            assert_eq!(app.zoom, zoom);
+            for button in [egui::PointerButton::Primary, egui::PointerButton::Middle] {
+                let mut events = vec![egui::Event::PointerMoved(position)];
+                if button == egui::PointerButton::Primary {
+                    events.push(key(egui::Key::Space, egui::Modifiers::NONE));
+                }
+                events.push(pointer_button(position, button, true));
+                let _ = frame(&mut app, &ctx, events);
+                let end = content.min + vec2(150.0, 120.0);
+                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+                assert!(app.view.panning.is_none());
+                assert_eq!(app.view.pan, pan);
+                let mut events = vec![pointer_button(end, button, false)];
+                if button == egui::PointerButton::Primary {
+                    events.push(release_key(egui::Key::Space));
+                }
+                let _ = frame(&mut app, &ctx, events);
+            }
+        }
+        let pointer = content.min + vec2(10.0, 15.0);
+        let point = (pointer - workspace.min - app.view.pan) / app.zoom;
+        let _ = frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(pointer),
+                wheel(
+                    egui::MouseWheelUnit::Line,
+                    vec2(0.0, 3.0),
+                    egui::Modifiers::CTRL,
+                ),
+            ],
+        );
+        assert!(
+            (app.zoom - 0.65).abs() < 0.0001,
+            "{mode:?}: zoom {} at {pointer:?}, workspace {workspace:?}",
+            app.zoom
+        );
+        assert!(((pointer - workspace.min - app.view.pan) / app.zoom - point).length() < 0.001);
+        let pan = app.view.pan;
+        let _ = frame(
+            &mut app,
+            &ctx,
+            vec![wheel(
+                egui::MouseWheelUnit::Page,
+                vec2(0.0, -1.0),
+                egui::Modifiers::NONE,
+            )],
+        );
+        assert_eq!(app.view.pan, pan - vec2(0.0, content.height()));
+        assert_navigation_only(&app, &project, &ctx);
+    }
 }
 
 #[test]

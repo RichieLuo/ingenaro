@@ -1,4 +1,17 @@
 pub fn run(args: &[String]) -> bool {
+    if args.get(1).is_some_and(|arg| arg == "--mcp-stdio") {
+        let result = (|| -> Result<(), String> {
+            let endpoint = args.get(2).ok_or("用法：rpshop --mcp-stdio http://127.0.0.1:PORT/mcp；密钥通过 RPSHOP_MCP_TOKEN 环境变量提供")?;
+            let token = std::env::var("RPSHOP_MCP_TOKEN")
+                .map_err(|_| "缺少 RPSHOP_MCP_TOKEN；请在 AI 工作台中启用当前工程 MCP")?;
+            rpshop::automation::run_stdio(endpoint, &token)
+        })();
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return true;
+    }
     // A console host for inspecting the same player used by the desktop app.
     // It stays local and exits when stdin closes or receives a line.
     if args.get(1).is_some_and(|a| a == "--preview-server") {

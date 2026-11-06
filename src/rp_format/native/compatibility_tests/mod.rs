@@ -66,6 +66,7 @@ fn order_fixture() -> (BTreeMap<u64, Graph>, Page, BTreeMap<u64, Binding>) {
         widgets: (1..=7)
             .map(|i| Widget::new(i, WidgetKind::Rectangle, 0.0, 0.0))
             .collect(),
+        group_names: BTreeMap::new(),
     };
     let bindings = (1..=7)
         .map(|i| {
@@ -372,6 +373,8 @@ fn check_native_fixture(variable: &str, legacy: bool) {
             widget.groups = vec![group_id];
         }
     }
+    crate::grouping::rename_group(&mut grouped.pages[pair.0], group_id, "RPShop named group")
+        .unwrap();
     native.save(&grouped, &destination).unwrap();
     let members = native
         .project
@@ -388,7 +391,22 @@ fn check_native_fixture(variable: &str, legacy: bool) {
     assert_eq!(members.len(), 2);
     assert_eq!(members[0].groups.len(), 1);
     assert_eq!(members[0].groups, members[1].groups);
-    assert!(native.group_bindings.contains_key(&members[0].groups[0]));
+    let group_id = members[0].groups[0];
+    assert!(native.group_bindings.contains_key(&group_id));
+    let mut renamed = native.project.clone();
+    assert_eq!(
+        renamed.pages[pair.0].group_name(group_id),
+        "RPShop named group"
+    );
+    crate::grouping::rename_group(&mut renamed.pages[pair.0], group_id, "RPShop renamed group")
+        .unwrap();
+    native.save(&renamed, &destination).unwrap();
+    assert!(
+        native.project.pages[pair.0]
+            .group_names
+            .values()
+            .any(|name| name == "RPShop renamed group")
+    );
     let mut ungrouped = native.project.clone();
     for widget in ungrouped
         .pages
@@ -402,6 +420,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
             widget.groups.clear();
         }
     }
+    ungrouped.pages[pair.0].prune_group_names();
     native.save(&ungrouped, &destination).unwrap();
     assert!(
         native

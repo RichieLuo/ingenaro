@@ -2,7 +2,14 @@ use super::*;
 
 impl App {
     pub(super) fn load_textures(&mut self, ctx: &egui::Context) {
-        let pages = BTreeSet::from([self.page]);
+        let mut pages = BTreeSet::from([self.page]);
+        if self.ai_page_overview_visible() {
+            for id in self.ai_activity_page_ids() {
+                if let Some(index) = self.project.pages.iter().position(|page| page.id == id) {
+                    pages.insert(index);
+                }
+            }
+        }
         let needed: BTreeSet<u64> = pages
             .iter()
             .filter_map(|i| self.project.pages.get(*i))
@@ -78,6 +85,8 @@ impl App {
             self.view.panning = None;
             return true;
         }
+        let content = viewport::content_rect(viewport);
+        let anchor = content.center() - viewport.min;
         let page = &self.project.pages[self.page];
         let output_size = page.size_for_output();
         let page_bounds = Rect::from_min_size(Pos2::ZERO, vec2(output_size[0], output_size[1]));
@@ -103,13 +112,9 @@ impl App {
             match command {
                 ViewCommand::Step(step) => {
                     let target = self.zoom + step;
-                    self.view
-                        .zoom_at(&mut self.zoom, target, viewport.size() / 2.0);
+                    self.view.zoom_at(&mut self.zoom, target, anchor);
                 }
-                ViewCommand::Zoom(target) => {
-                    self.view
-                        .zoom_at(&mut self.zoom, target, viewport.size() / 2.0)
-                }
+                ViewCommand::Zoom(target) => self.view.zoom_at(&mut self.zoom, target, anchor),
                 ViewCommand::CenterPage => self.view.center(self.zoom, viewport, page_bounds),
                 ViewCommand::FitSelection => {
                     if let Some(bounds) = selected {
@@ -130,7 +135,7 @@ impl App {
                 }
             }
         }
-        let hovered = ui.rect_contains_pointer(viewport);
+        let hovered = ui.rect_contains_pointer(content);
         let space = !ctx.wants_keyboard_input() && ctx.input(|i| i.key_down(egui::Key::Space));
         let was_panning = self.view.panning.is_some();
         if hovered && self.drag.is_none() {
@@ -178,7 +183,7 @@ impl App {
                         delta,
                         modifiers,
                         pointer - viewport.min,
-                        viewport,
+                        content,
                     ),
                     egui::Event::Zoom(factor) if factor.is_finite() && factor > 0.0 => {
                         let target = self.zoom * factor;
@@ -232,20 +237,68 @@ impl App {
                     ui.add_space(8.0);
                 }
                 let size = ui.available_size().max(vec2(1.0, 1.0));
-                let (workspace, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+                let (id, workspace) = ui.allocate_space(size);
+                let content = viewport::content_rect(workspace);
+                // Give ruler gestures an inert owner instead of letting egui's
+                // nearest-widget hit testing grab the adjacent sidebar resizer.
+                ui.interact(workspace, id.with("ruler-strips"), Sense::click_and_drag());
+                let response = ui.interact(content, id, Sense::click_and_drag());
                 let navigating = self.navigate_canvas(ui, ctx, workspace);
+                // Finish before painting and hit-testing: committed geometry must
+                // never remain an invisible/moving pointer target during editing.
+                if self.drag.is_some()
+                    || self.editing.is_some()
+                    || (!navigating
+                        && ui.is_enabled()
+                        && ui.rect_contains_pointer(content)
+                        && ctx.input(|i| {
+                            i.pointer.primary_down()
+                                || i.pointer.secondary_down()
+                                || i.pointer.any_pressed()
+                                || i.pointer.any_released()
+                        }))
+                {
+                    self.ai_reveal.clear();
+                }
+                let reveal_time = ctx.input(|i| i.time);
+                self.ai_reveal.prune(&self.project, reveal_time);
+                if self.ai_reveal.is_active(reveal_time) {
+                    ctx.request_repaint_after(Duration::from_millis(16));
+                }
                 let page = &self.project.pages[self.page];
                 let origin = workspace.min + self.view.pan;
                 let page_rect =
                     Rect::from_min_size(origin, vec2(page.width, page.height) * self.zoom);
-                let rect = if auto_canvas {
-                    viewport::content_rect(workspace)
-                } else {
-                    page_rect
-                };
-                let painter = ui
+                let rect = if auto_canvas { content } else { page_rect };
+                let workspace_painter = ui
                     .painter()
                     .with_clip_rect(workspace.intersect(ui.clip_rect()));
+                let painter = workspace_painter.with_clip_rect(content.intersect(ui.clip_rect()));
+                let clipped = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+                let released = ctx.input(|i| i.pointer.primary_released());
+                let drop_at = if self.pending_widget.is_some()
+                    && ui.is_enabled()
+                    && ui.rect_contains_pointer(clipped.clip_rect())
+                {
+                    ctx.input(|i| {
+                        if released {
+                            i.pointer.interact_pos()
+                        } else {
+                            i.pointer.hover_pos()
+                        }
+                    })
+                    .map(|pos| ((pos - origin) / self.zoom).max(egui::Vec2::ZERO))
+                } else {
+                    None
+                };
+                // Paint the committed component on the release frame, at the preview's position.
+                if released
+                    && let Some(drag) = self.pending_widget.take()
+                    && let Some(pos) = drop_at
+                {
+                    self.add_library_item(drag.item, pos.x, pos.y);
+                }
+                let page = &self.project.pages[self.page];
                 if !auto_canvas {
                     painter.rect_filled(
                         rect.translate(vec2(0.0, 5.0)).expand(4.0),
@@ -254,35 +307,6 @@ impl App {
                     );
                 }
                 painter.rect_filled(rect, 0.0, color(&page.background));
-                if auto_canvas {
-                    viewport::paint_auto_rulers(&painter, workspace, origin, self.zoom);
-                } else {
-                    // Rulers remain in document coordinates as zoom changes.
-                    for x in (0..=page.width as usize).step_by(100) {
-                        let px = origin.x + x as f32 * self.zoom;
-                        painter.text(
-                            Pos2::new(px, origin.y - 16.0),
-                            Align2::CENTER_CENTER,
-                            x.to_string(),
-                            FontId::proportional(9.0),
-                            MUTED,
-                        );
-                        painter.line_segment(
-                            [Pos2::new(px, origin.y - 6.0), Pos2::new(px, origin.y - 2.0)],
-                            Stroke::new(1.0, BORDER),
-                        );
-                    }
-                    for y in (0..=page.height as usize).step_by(100) {
-                        let py = origin.y + y as f32 * self.zoom;
-                        painter.text(
-                            Pos2::new(origin.x - 20.0, py),
-                            Align2::CENTER_CENTER,
-                            y.to_string(),
-                            FontId::proportional(9.0),
-                            MUTED,
-                        );
-                    }
-                }
                 if self.grid && self.zoom >= 0.35 {
                     let grid = Stroke::new(0.5, Color32::from_black_alpha(9));
                     let x_range = if auto_canvas {
@@ -319,21 +343,41 @@ impl App {
                         );
                     }
                 }
-                let clipped = painter.with_clip_rect(rect.intersect(ui.clip_rect()));
-                let painter = if auto_canvas {
-                    clipped.clone()
-                } else {
-                    painter
-                };
+                let mut reveal_focus = None;
+                let mut selection_revealing = false;
                 for w in &page.widgets {
                     if !w.hidden {
-                        draw_widget(&clipped, w, origin, self.zoom, self.textures.get(&w.id));
+                        let sample = self.ai_reveal.sample(page.id, w, reveal_time);
+                        selection_revealing |= self.selected.contains(&w.id) && sample.revealing;
+                        if sample.opacity > 0.0 {
+                            let mut widget_painter = clipped.clone();
+                            widget_painter.multiply_opacity(sample.opacity);
+                            draw_widget(
+                                &widget_painter,
+                                &sample.widget,
+                                origin,
+                                self.zoom,
+                                self.textures.get(&w.id),
+                            );
+                        }
+                        if let Some(progress) = sample.progress {
+                            let bounds = manipulation::rotated_bounds(&sample.widget);
+                            let bounds = Rect::from_min_max(
+                                origin + vec2(bounds[0], bounds[1]) * self.zoom,
+                                origin + vec2(bounds[2], bounds[3]) * self.zoom,
+                            );
+                            if bounds.intersects(clipped.clip_rect()) {
+                                reveal_focus = Some((bounds, progress));
+                            }
+                        }
                     }
                 }
+                self.ai_reveal
+                    .paint_status(&clipped, page.id, reveal_time, reveal_focus);
                 for w in page
                     .widgets
                     .iter()
-                    .filter(|w| self.selected.contains(&w.id) && !w.hidden)
+                    .filter(|w| !selection_revealing && self.selected.contains(&w.id) && !w.hidden)
                 {
                     draw_selection_frame(&painter, w, origin, self.zoom, false);
                 }
@@ -351,7 +395,9 @@ impl App {
                     })
                     .map(|w| w.id)
                     .collect();
-                let bounds = selection_geometry(page, &editable);
+                let bounds = (!selection_revealing)
+                    .then(|| selection_geometry(page, &editable))
+                    .flatten();
                 if let Some(bounds) = &bounds {
                     draw_selection_frame(&painter, bounds, origin, self.zoom, true);
                 }
@@ -367,8 +413,15 @@ impl App {
                             })
                     })
                 };
-                if let Some(pos) = response.hover_pos().filter(|_| !navigating) {
-                    if self.tool.is_some() || self.pending_widget.is_some() {
+                if let Some(drag) = &self.pending_widget {
+                    if let Some(pos) = drop_at {
+                        drag.paint(&clipped, origin + pos * zoom, zoom);
+                        ctx.set_cursor_icon(egui::CursorIcon::Copy);
+                    } else if ui.rect_contains_pointer(content) {
+                        ctx.set_cursor_icon(egui::CursorIcon::NoDrop);
+                    }
+                } else if let Some(pos) = response.hover_pos().filter(|_| !navigating) {
+                    if self.tool.is_some() {
                         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
                     } else if let Some(handle) = handle_at(pos) {
                         ctx.set_cursor_icon(match handle {
@@ -380,20 +433,11 @@ impl App {
                         });
                     }
                 }
-                if ctx.input(|i| i.pointer.any_released())
-                    && let Some(item) = self.pending_widget.take()
-                    && let Some(pos) = ctx
-                        .input(|i| i.pointer.interact_pos())
-                        .filter(|p| rect.contains(*p))
-                {
-                    let p = (pos - origin) / self.zoom;
-                    self.add_library_item(item, p.x, p.y);
-                }
                 if !navigating
                     && response.clicked()
                     && let Some(pos) = response
                         .interact_pointer_pos()
-                        .filter(|pos| !auto_canvas || rect.contains(*pos))
+                        .filter(|pos| content.contains(*pos))
                 {
                     if let Some(kind) = self.tool.take() {
                         if rect.contains(pos) {
@@ -422,7 +466,12 @@ impl App {
                         }
                     }
                 }
-                if !navigating && response.double_clicked() {
+                if !navigating
+                    && response.double_clicked()
+                    && response
+                        .interact_pointer_pos()
+                        .is_some_and(|p| content.contains(p))
+                {
                     self.editing = self
                         .selected
                         .iter()
@@ -431,7 +480,9 @@ impl App {
                 }
                 if !navigating
                     && response.secondary_clicked()
-                    && let Some(pos) = response.interact_pointer_pos()
+                    && let Some(pos) = response
+                        .interact_pointer_pos()
+                        .filter(|pos| content.contains(*pos))
                 {
                     let p = (pos - origin) / self.zoom;
                     let hit = self.project.pages[self.page]
@@ -456,7 +507,7 @@ impl App {
                     && response.drag_started_by(egui::PointerButton::Primary)
                     && let Some(pos) = ctx
                         .input(|i| i.pointer.press_origin())
-                        .filter(|pos| !auto_canvas || rect.contains(*pos))
+                        .filter(|pos| content.contains(*pos))
                 {
                     if self.tool.is_some() && rect.contains(pos) {
                         let kind = self.tool.take().unwrap();
@@ -560,7 +611,9 @@ impl App {
                 if !navigating
                     && response.dragged_by(egui::PointerButton::Primary)
                     && let Some(drag) = &self.drag
-                    && let Some(pos) = response.interact_pointer_pos()
+                    && let Some(pos) = response
+                        .interact_pointer_pos()
+                        .filter(|pos| content.contains(*pos))
                 {
                     let delta = (pos - drag.pointer) / self.zoom;
                     let modifiers = ctx.input(|i| i.modifiers);
@@ -690,6 +743,51 @@ impl App {
                         ui.close();
                     }
                 });
+                viewport::paint_rulers(&workspace_painter, workspace, origin, self.zoom);
             });
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    use super::*;
+
+    #[test]
+    fn pointer_press_finishes_reveal_before_selection_without_creating_history() {
+        let before = Project::blank();
+        let mut after = before.clone();
+        after.pages[0]
+            .widgets
+            .push(Widget::new(2, WidgetKind::Rectangle, 0.0, 0.0));
+        after.next_id = 3;
+        let mut app = tests::fixture(after.clone());
+        app.zoom = 1.0;
+        app.ai_reveal.record(&before, &after, 0.0);
+        let context = egui::Context::default();
+        let position = Pos2::new(100.0, 100.0);
+        for (time, pressed) in [(0.0, None), (0.1, Some(true)), (0.12, Some(false))] {
+            let mut events = vec![egui::Event::PointerMoved(position)];
+            if let Some(pressed) = pressed {
+                events.push(egui::Event::PointerButton {
+                    pos: position,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+            let _ = context.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(900.0, 600.0))),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.canvas(ctx),
+            );
+            assert_eq!(app.ai_reveal.is_active(time), pressed.is_none());
+            assert_eq!(app.project, after);
+            assert!(app.undo.is_empty());
+        }
+        assert_eq!(app.selected, BTreeSet::from([2]));
     }
 }

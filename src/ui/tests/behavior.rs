@@ -6,6 +6,7 @@ fn layer_icons_toggle_visibility_and_lock_without_selecting_the_row() {
     add(&mut project, WidgetKind::Text, 80.0, 80.0);
     project.pages[0].widgets[0].name = "layer".into();
     let mut app = fixture(project);
+    app.sidebar_layout.active = Some(sidebar::LeftPane::Layers);
     let ctx = egui::Context::default();
     let output = frame(&mut app, &ctx, Vec::new());
     let row_y = text_center(&output, "T layer").y;
@@ -56,12 +57,13 @@ fn many_long_layer_names_do_not_expand_the_default_navigation_panel() {
         );
     }
     let mut app = fixture(project);
+    app.sidebar_layout.active = Some(sidebar::LeftPane::Layers);
     let ctx = egui::Context::default();
     for _ in 0..10 {
         let output = frame(&mut app, &ctx, Vec::new());
         let _ = text_center(&output, "显示");
         let _ = text_center(&output, "锁定");
-        let _ = text_center(&output, "眼睛控制显示，锁控制编辑");
+        let _ = text_center(&output, "双击名称可重命名");
         let panel = egui::containers::panel::PanelState::load(&ctx, egui::Id::new("navigator"))
             .expect("the navigation panel must be laid out");
         assert!(

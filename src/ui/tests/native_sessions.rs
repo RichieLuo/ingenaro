@@ -93,6 +93,7 @@ fn native_view_metadata_upgrade_preserves_unsaved_edits_and_old_tree_upgrade() {
             old_tree_session(&document, path.clone())
         } else {
             Session {
+                ai_document_id: "test-document".into(),
                 project: document.project.clone(),
                 saved: document.project.clone(),
                 path: Some(path.clone()),

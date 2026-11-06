@@ -11,20 +11,33 @@ product-name = "RPShop"
 
 [dependencies]
 anyhow = "1"
+arboard = { version = "3", default-features = false, features = ["image-data"] }
 base64 = "0.22"
 directories = "6"
 flate2 = "1"
 eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "persistence", "x11", "wayland"] }
+egui_commonmark = { version = "0.22", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "ico"] }
 lz4_flex = "0.11"
+pulldown-cmark = { version = "0.13", default-features = false }
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls", "stream"] }
+uuid = { version = "1", features = ["v4"] }
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+wry = { version = "0.55", default-features = false, features = ["os-webview"] }
 raw-window-handle = "0.6"
-windows-sys = { version = "0.61", features = ["Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Dwm", "Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "ico"] }

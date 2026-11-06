@@ -1,6 +1,8 @@
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, vec2};
 use rpshop::model::{PageTreeNode, Project};
 
+use super::sidebar;
+
 #[derive(Default)]
 pub(super) struct NavigationAction {
     pub activate: Option<usize>,
@@ -157,25 +159,12 @@ impl TreeRenderer<'_> {
             let left = rect.left() + depth as f32 * 15.0;
             let center_y = rect.center().y;
             if !node.children().is_empty() {
-                let c = Pos2::new(left + 6.0, center_y);
-                let points = if open {
-                    vec![
-                        c + vec2(-3.5, -2.0),
-                        c + vec2(3.5, -2.0),
-                        c + vec2(0.0, 3.0),
-                    ]
-                } else {
-                    vec![
-                        c + vec2(-2.0, -3.5),
-                        c + vec2(-2.0, 3.5),
-                        c + vec2(3.0, 0.0),
-                    ]
-                };
-                ui.painter().add(egui::Shape::convex_polygon(
-                    points,
+                sidebar::paint_disclosure(
+                    ui.painter(),
+                    Pos2::new(left + 6.0, center_y),
+                    open,
                     Color32::from_gray(140),
-                    Stroke::NONE,
-                ));
+                );
             }
             let icon =
                 Rect::from_min_size(Pos2::new(left + 14.0, center_y - 6.0), vec2(13.0, 12.0));

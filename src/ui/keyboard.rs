@@ -256,10 +256,16 @@ impl App {
     }
 
     pub(super) fn write_component_clipboard(&self, ctx: &egui::Context) {
-        if !self.clipboard.is_empty()
-            && let Ok(contents) = serde_json::to_string(&self.clipboard)
-        {
-            ctx.copy_text(format!("RPShop.components.v1\n{contents}"));
+        if self.clipboard.widgets.is_empty() {
+            return;
+        }
+        let (version, contents) = if self.clipboard.group_names.is_empty() {
+            (1, serde_json::to_string(&self.clipboard.widgets))
+        } else {
+            (2, serde_json::to_string(&self.clipboard))
+        };
+        if let Ok(contents) = contents {
+            ctx.copy_text(format!("RPShop.components.v{version}\n{contents}"));
         }
     }
 
@@ -269,7 +275,8 @@ impl App {
     }
 
     pub(super) fn cut_components(&mut self, ctx: &egui::Context) {
-        self.clipboard = self.project.pages[self.page]
+        let page = &self.project.pages[self.page];
+        let widgets = page
             .widgets
             .iter()
             .filter(|widget| {
@@ -282,33 +289,52 @@ impl App {
             })
             .cloned()
             .collect();
-        if self.clipboard.is_empty() {
+        self.clipboard = editing::ComponentClipboard::from_selection(page, widgets);
+        if self.clipboard.widgets.is_empty() {
             self.status = "当前选择没有可剪切的组件".into();
             return;
         }
         self.write_component_clipboard(ctx);
-        let count = self.clipboard.len();
+        let count = self.clipboard.widgets.len();
         self.delete_selection();
         self.status = format!("已剪切 {count} 个组件");
     }
 
     pub(super) fn paste_components(&mut self, contents: &str) {
-        let Some(contents) = contents.strip_prefix("RPShop.components.v1\n") else {
-            self.status = "剪贴板中没有可粘贴的组件".into();
-            return;
-        };
+        let (contents, legacy) =
+            if let Some(contents) = contents.strip_prefix("RPShop.components.v1\n") {
+                (contents, true)
+            } else if let Some(contents) = contents.strip_prefix("RPShop.components.v2\n") {
+                (contents, false)
+            } else {
+                self.status = "剪贴板中没有可粘贴的组件".into();
+                return;
+            };
         if contents.len() > 48 * 1024 * 1024 {
             self.status = "剪贴板组件超过 48 MB 限制".into();
             return;
         }
-        let widgets = match serde_json::from_str::<Vec<Widget>>(contents) {
-            Ok(widgets) if !widgets.is_empty() && widgets.len() <= 5_000 => widgets,
+        let parsed = if legacy {
+            serde_json::from_str::<Vec<Widget>>(contents).map(|widgets| {
+                editing::ComponentClipboard {
+                    widgets,
+                    ..Default::default()
+                }
+            })
+        } else {
+            serde_json::from_str(contents)
+        };
+        let clipboard = match parsed {
+            Ok(clipboard) if !clipboard.widgets.is_empty() && clipboard.widgets.len() <= 5_000 => {
+                clipboard
+            }
             _ => {
                 self.status = "剪贴板组件数据无效".into();
                 return;
             }
         };
-        let extra_ids = widgets
+        let extra_ids = clipboard
+            .widgets
             .iter()
             .map(|widget| widget.groups.len() as u64 + 1)
             .sum::<u64>();
@@ -318,8 +344,8 @@ impl App {
         }
         let before = self.project.clone();
         let selected = self.selected.clone();
-        let expected_count = before.pages[self.page].widgets.len() + widgets.len();
-        let old_clipboard = std::mem::replace(&mut self.clipboard, widgets);
+        let expected_count = before.pages[self.page].widgets.len() + clipboard.widgets.len();
+        let old_clipboard = std::mem::replace(&mut self.clipboard, clipboard);
         self.paste();
         if self.project.pages[self.page].widgets.len() != expected_count {
             self.project = before;

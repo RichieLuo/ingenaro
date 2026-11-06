@@ -2,6 +2,9 @@ use super::*;
 
 impl App {
     pub(super) fn remember(&mut self, before: Project) {
+        if before != self.project {
+            self.ai_reveal.clear();
+        }
         if let Some(native) = &self.native {
             native.refresh_previews(&mut self.project, &before);
         }
@@ -17,6 +20,8 @@ impl App {
     }
 
     pub(super) fn undo(&mut self) {
+        self.ai_clear_page_activity();
+        self.ai_reveal.clear();
         if let Some(p) = self.undo.pop() {
             self.redo.push(std::mem::replace(&mut self.project, p));
             self.page = self.page.min(self.project.pages.len() - 1);
@@ -29,6 +34,8 @@ impl App {
     }
 
     pub(super) fn redo(&mut self) {
+        self.ai_clear_page_activity();
+        self.ai_reveal.clear();
         if let Some(p) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.project, p));
             self.page = self.page.min(self.project.pages.len() - 1);
@@ -81,10 +88,12 @@ impl App {
         let result = self.write_document(&path);
         match result {
             Ok(()) => {
-                if native_output && let Some(document) = &self.native {
-                    self.project = document.project.clone();
+                if native_output && self.native.is_some() {
+                    self.ai_native_checkpoint();
+                    self.project = self.native.as_ref().unwrap().project.clone();
                     self.page = self.page.min(self.project.pages.len() - 1);
                     self.selected.clear();
+                    self.expanded_layer_groups.clear();
                     self.textures.clear();
                     self.undo.clear();
                     self.redo.clear();
@@ -93,6 +102,7 @@ impl App {
                 self.saved = self.project.clone();
                 self.status = format!("已保存：{}", path.display());
                 self.path = Some(path);
+                self.ai_bind_document_path(false);
                 if !native_output {
                     self.native = None;
                 }
@@ -160,6 +170,7 @@ impl App {
         if let Some(result) = result {
             match result {
                 Ok(document) => {
+                    self.ai_document_replaced();
                     self.browser_preview = None;
                     self.cached_native_preview_source = None;
                     let p = document.project;
@@ -172,8 +183,15 @@ impl App {
                     self.project = p.clone();
                     self.saved = p;
                     self.path = path;
+                    self.ai_bind_document_path(true);
+                    if action == "new" {
+                        self.ai_apply_new_name();
+                    }
                     self.page = 0;
                     self.selected.clear();
+                    self.pending_widget = None;
+                    self.expanded_layer_groups.clear();
+                    self.layer_name_dialog = None;
                     self.undo.clear();
                     self.redo.clear();
                     self.textures.clear();
@@ -200,6 +218,10 @@ impl App {
     }
 
     pub(super) fn export_file(&mut self, svg: bool) {
+        let _ = self.export_file_result(svg);
+    }
+
+    pub(super) fn export_file_result(&mut self, svg: bool) -> Result<(), String> {
         let (ext, name) = if svg {
             ("svg", self.project.pages[self.page].name.clone())
         } else {
@@ -225,9 +247,17 @@ impl App {
                 std::fs::write(&path, s)?;
                 Ok(())
             }) {
-                Ok(()) => self.status = format!("已导出：{}", path.display()),
-                Err(e) => self.status = format!("导出失败：{e:#}"),
+                Ok(()) => {
+                    self.status = format!("已导出：{}", path.display());
+                    Ok(())
+                }
+                Err(e) => {
+                    self.status = format!("导出失败：{e:#}");
+                    Err(self.status.clone())
+                }
             }
+        } else {
+            Err("已取消导出，未写入文件".into())
         }
     }
 }

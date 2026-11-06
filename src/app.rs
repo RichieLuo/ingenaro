@@ -25,7 +25,11 @@ pub fn run() -> eframe::Result {
         .as_ref()
         .map(crate::shell_open::Instance::attachment);
     let mut viewport = eframe::egui::ViewportBuilder::default()
-        .with_title("RPShop · 原型工作室")
+        .with_title(if screenshot.is_some() {
+            "RPShop · 界面预览（隔离）"
+        } else {
+            "RPShop · 原型工作室"
+        })
         .with_decorations(!cfg!(target_os = "windows"))
         .with_inner_size([1500.0, 950.0])
         .with_min_inner_size([1100.0, 720.0]);
@@ -76,7 +80,15 @@ fn shell_arguments(arguments: &[std::ffi::OsString]) -> std::io::Result<Vec<std:
                     "GUI option requires a value",
                 )
             })?;
-        } else if argument != "--interaction-example" {
+        } else if ![
+            "--interaction-example",
+            "--ai-design",
+            "--ai-example",
+            "--qa-interactive",
+        ]
+        .iter()
+        .any(|flag| argument == *flag)
+        {
             shell.push(argument.clone());
         }
     }

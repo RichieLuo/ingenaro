@@ -9,6 +9,50 @@ use crate::{
     selection::LayerMove,
 };
 
+/// A sibling in the layer panel. Group members retain back-to-front canvas order.
+pub enum Layer<'a> {
+    Group { id: u64, members: &'a [Widget] },
+    Widget(&'a Widget),
+}
+
+/// Walk one level of a validated page's layer tree in front-to-back order.
+/// Start with the whole page at depth zero, then pass each group's members at depth + 1.
+pub fn layers(mut widgets: &[Widget], depth: usize) -> impl Iterator<Item = Layer<'_>> {
+    std::iter::from_fn(move || {
+        let widget = widgets.last()?;
+        if let Some(&id) = widget.groups.get(depth) {
+            let start = widgets
+                .iter()
+                .rposition(|widget| widget.groups.get(depth) != Some(&id))
+                .map_or(0, |index| index + 1);
+            let (rest, members) = widgets.split_at(start);
+            widgets = rest;
+            Some(Layer::Group { id, members })
+        } else {
+            widgets = &widgets[..widgets.len() - 1];
+            Some(Layer::Widget(widget))
+        }
+    })
+}
+
+pub(crate) fn validate_group_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty() && name.len() <= 1024,
+        "分组名称不能为空且不能超过 1024 字节"
+    );
+    Ok(())
+}
+
+pub fn rename_group(page: &mut Page, id: u64, name: &str) -> Result<()> {
+    validate_group_name(name)?;
+    ensure!(
+        page.widgets.iter().any(|w| w.groups.contains(&id)),
+        "当前页面不存在分组 {id}"
+    );
+    page.group_names.insert(id, name.to_owned());
+    Ok(())
+}
+
 /// Normal selection expands the outermost group. An explicit inside-selection
 /// keeps the requested member IDs, permitting operations within a group.
 pub fn expanded_selection(page: &Page, ids: &BTreeSet<u64>, inside: bool) -> BTreeSet<u64> {
@@ -36,7 +80,20 @@ pub fn expanded_selection(page: &Page, ids: &BTreeSet<u64>, inside: bool) -> BTr
 /// their own order and geometry; the block ends at the old topmost member.
 /// The returned IDs are widget IDs suitable for the editor's selection.
 pub fn group(project: &mut Project, page: usize, ids: &BTreeSet<u64>) -> Result<BTreeSet<u64>> {
+    group_named(project, page, ids, None).map(|(_, selected)| selected)
+}
+
+/// Create a group with an optional custom name in the same transaction.
+pub fn group_named(
+    project: &mut Project,
+    page: usize,
+    ids: &BTreeSet<u64>,
+    name: Option<&str>,
+) -> Result<(u64, BTreeSet<u64>)> {
     project.validate()?;
+    if let Some(name) = name {
+        validate_group_name(name)?;
+    }
     let source = project.pages.get(page).context("组合所在页面不存在")?;
     ensure!(
         ids.iter()
@@ -84,9 +141,12 @@ pub fn group(project: &mut Project, page: usize, ids: &BTreeSet<u64>) -> Result<
     others.extend(members);
     others.extend(above);
     *widgets = others;
+    if let Some(name) = name {
+        edited.pages[page].group_names.insert(id, name.to_owned());
+    }
     edited.validate()?;
     *project = edited;
-    Ok(selected)
+    Ok((id, selected))
 }
 
 /// Remove one outer group from every selected group, preserving all deeper
@@ -128,6 +188,9 @@ pub fn ungroup(project: &mut Project, page: usize, ids: &BTreeSet<u64>) -> Resul
             widget.groups.remove(0);
         }
     }
+    edited.pages[page]
+        .group_names
+        .retain(|id, _| !groups.contains(id));
     edited.validate()?;
     *project = edited;
     Ok(selected)
@@ -137,6 +200,11 @@ pub fn ungroup(project: &mut Project, page: usize, ids: &BTreeSet<u64>) -> Resul
 /// supplies the destination project's allocator. Failure changes neither data
 /// nor the allocator; ancestry and member order remain identical.
 pub fn remap_groups(widgets: &mut [Widget], next_id: &mut u64) -> Result<()> {
+    remap_group_ids(widgets, next_id).map(|_| ())
+}
+
+/// Return the ID mapping so clipboard metadata can follow the copied groups.
+pub fn remap_group_ids(widgets: &mut [Widget], next_id: &mut u64) -> Result<BTreeMap<u64, u64>> {
     let mut mapping = BTreeMap::new();
     let mut next = *next_id;
     let widget_ids = widgets
@@ -174,7 +242,7 @@ pub fn remap_groups(widgets: &mut [Widget], next_id: &mut u64) -> Result<()> {
         }
     }
     *next_id = next;
-    Ok(())
+    Ok(mapping)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

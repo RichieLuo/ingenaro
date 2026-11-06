@@ -24,6 +24,7 @@ impl Converter<'_> {
             canvas: CanvasMode::Auto,
             background: "#FFFFFF".into(),
             widgets: Vec::new(),
+            group_names: BTreeMap::new(),
         };
         let properties = self.styles.for_page(self.graph, root);
         let size = properties.get(&105).unwrap_or(&Value::Null);
@@ -63,6 +64,24 @@ impl Converter<'_> {
             &mut BTreeSet::new(),
             0,
         )?;
+        for id in page
+            .widgets
+            .iter()
+            .flat_map(|w| &w.groups)
+            .collect::<BTreeSet<_>>()
+        {
+            let binding = &self.group_bindings[id];
+            if let Some(name) = self
+                .graph
+                .node(&binding.object)
+                .and_then(|node| node.properties.pointer("/name-block/text"))
+                .and_then(Value::as_str)
+                .map(|name| truncate(name, 1024))
+                .filter(|name| !name.trim().is_empty())
+            {
+                page.group_names.insert(*id, name);
+            }
+        }
         for widget in &page.widgets {
             let bounds = crate::manipulation::rotated_bounds(widget);
             if page.canvas.auto_width() {
@@ -91,10 +110,12 @@ impl Converter<'_> {
                 canvas: CanvasMode::Fixed,
                 background: "#F5F7FA".into(),
                 widgets: Vec::new(),
+                group_names: BTreeMap::new(),
             };
             for (index, (package, name)) in components.iter().enumerate() {
                 let page = self.page(package, name)?;
                 page_ids.insert(package.clone(), gallery.id);
+                gallery.group_names.extend(page.group_names);
                 let cell_x = (index % 4) as f32 * 400.0;
                 let cell_y = (index / 4) as f32 * 360.0;
                 let mut label = Widget::new(

@@ -9,6 +9,7 @@ fn finishing_screenshot_capture_does_not_overwrite_the_real_user_session() {
         &mut storage,
         "rpshop-session",
         &Session {
+            ai_document_id: "test-document".into(),
             project: user_project.clone(),
             saved: user_project,
             path: None,

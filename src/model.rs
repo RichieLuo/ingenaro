@@ -7,6 +7,7 @@ mod demo;
 use anyhow::{Context, Result, bail, ensure};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
@@ -157,6 +158,9 @@ pub struct Page {
     pub canvas: CanvasMode,
     pub background: String,
     pub widgets: Vec<Widget>,
+    /// Custom names for groups whose IDs occur in this page's widget paths.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub group_names: BTreeMap<u64, String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -192,6 +196,24 @@ pub struct TextLayout {
 }
 
 impl Page {
+    pub fn group_name(&self, id: u64) -> Cow<'_, str> {
+        self.group_names.get(&id).map_or_else(
+            || Cow::Owned(format!("分组 {id}")),
+            |name| Cow::Borrowed(name.as_str()),
+        )
+    }
+
+    pub fn prune_group_names(&mut self) {
+        if !self.group_names.is_empty() {
+            let groups = self
+                .widgets
+                .iter()
+                .flat_map(|w| &w.groups)
+                .collect::<HashSet<_>>();
+            self.group_names.retain(|id, _| groups.contains(id));
+        }
+    }
+
     /// Finite preview/export dimensions for otherwise unbounded editor pages.
     pub fn size_for_output(&self) -> [f32; 2] {
         let mut size = [self.width, self.height];
@@ -418,6 +440,7 @@ impl Project {
                 canvas: CanvasMode::Fixed,
                 background: "#FFFFFF".to_owned(),
                 widgets: Vec::new(),
+                group_names: BTreeMap::new(),
             }],
             page_tree: Vec::new(),
             interaction_events: Vec::new(),

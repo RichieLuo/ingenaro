@@ -528,56 +528,280 @@ pub const ITEMS: &[LibraryItem] = &[
         "icon-search",
         "搜索",
         Icons,
-        Preset::Icon("search"),
+        Preset::Icon(Icon::Search),
         "search find 搜索 放大镜"
     ),
     item!(
         "icon-close",
         "关闭",
         Icons,
-        Preset::Icon("close"),
+        Preset::Icon(Icon::Close),
         "close x 删除"
     ),
     item!(
         "icon-menu",
         "菜单",
         Icons,
-        Preset::Icon("menu"),
+        Preset::Icon(Icon::Menu),
         "menu hamburger"
     ),
     item!(
         "icon-home",
         "首页",
         Icons,
-        Preset::Icon("home"),
+        Preset::Icon(Icon::Home),
         "home house"
     ),
     item!(
         "icon-user",
         "用户",
         Icons,
-        Preset::Icon("user"),
+        Preset::Icon(Icon::User),
         "user person 人像"
     ),
     item!(
         "icon-check",
         "勾选",
         Icons,
-        Preset::Icon("check"),
+        Preset::Icon(Icon::Check),
         "check tick 对勾"
     ),
     item!(
         "icon-plus",
         "添加",
         Icons,
-        Preset::Icon("plus"),
+        Preset::Icon(Icon::Plus),
         "add plus 加号"
     ),
     item!(
         "icon-chevron",
         "下一步",
         Icons,
-        Preset::Icon("chevron"),
+        Preset::Icon(Icon::Next),
         "chevron next 向右"
+    ),
+    item!(
+        "icon-arrow-left",
+        "向左",
+        Icons,
+        Preset::Icon(Icon::Left),
+        "left arrow back 返回"
+    ),
+    item!(
+        "icon-arrow-right",
+        "向右",
+        Icons,
+        Preset::Icon(Icon::Right),
+        "right arrow forward 前进"
+    ),
+    item!(
+        "icon-chevron-down",
+        "向下展开",
+        Icons,
+        Preset::Icon(Icon::Down),
+        "down chevron expand 展开"
+    ),
+    item!(
+        "icon-minus",
+        "减号",
+        Icons,
+        Preset::Icon(Icon::Minus),
+        "minus remove 减少"
+    ),
+    item!(
+        "icon-edit",
+        "编辑",
+        Icons,
+        Preset::Icon(Icon::Edit),
+        "edit pencil 修改 铅笔"
+    ),
+    item!(
+        "icon-trash",
+        "删除",
+        Icons,
+        Preset::Icon(Icon::Trash),
+        "trash delete bin 回收站"
+    ),
+    item!(
+        "icon-copy",
+        "复制",
+        Icons,
+        Preset::Icon(Icon::Copy),
+        "copy duplicate clone 拷贝"
+    ),
+    item!(
+        "icon-settings",
+        "设置",
+        Icons,
+        Preset::Icon(Icon::Settings),
+        "settings gear preferences 齿轮"
+    ),
+    item!(
+        "icon-filter",
+        "筛选",
+        Icons,
+        Preset::Icon(Icon::Filter),
+        "filter funnel 过滤 漏斗"
+    ),
+    item!(
+        "icon-download",
+        "下载",
+        Icons,
+        Preset::Icon(Icon::Download),
+        "download save 导出"
+    ),
+    item!(
+        "icon-upload",
+        "上传",
+        Icons,
+        Preset::Icon(Icon::Upload),
+        "upload import 导入"
+    ),
+    item!(
+        "icon-folder",
+        "文件夹",
+        Icons,
+        Preset::Icon(Icon::Folder),
+        "folder directory 目录"
+    ),
+    item!(
+        "icon-bell",
+        "通知",
+        Icons,
+        Preset::Icon(Icon::Bell),
+        "bell notification 铃铛"
+    ),
+    item!(
+        "icon-calendar",
+        "日历",
+        Icons,
+        Preset::Icon(Icon::Calendar),
+        "calendar date 日期"
+    ),
+    item!(
+        "icon-heart",
+        "喜欢",
+        Icons,
+        Preset::Icon(Icon::Heart),
+        "heart like favorite 爱心"
+    ),
+    item!(
+        "icon-star",
+        "收藏",
+        Icons,
+        Preset::Icon(Icon::Star),
+        "star bookmark favorite 星标"
+    ),
+    item!(
+        "icon-info",
+        "信息",
+        Icons,
+        Preset::Icon(Icon::Info),
+        "information info 帮助 说明"
+    ),
+    item!(
+        "icon-alert",
+        "警告",
+        Icons,
+        Preset::Icon(Icon::Alert),
+        "alert warning caution 提醒"
+    ),
+    item!(
+        "icon-lock",
+        "锁定",
+        Icons,
+        Preset::Icon(Icon::Lock),
+        "lock privacy security 锁"
+    ),
+    item!(
+        "icon-mail",
+        "邮件",
+        Icons,
+        Preset::Icon(Icon::Mail),
+        "mail email envelope 信封"
+    ),
+    item!(
+        "pattern-card",
+        "信息卡片",
+        Patterns,
+        Preset::Pattern(Pattern::Card),
+        "card resource 内容卡片 资源卡片"
+    ),
+    item!(
+        "pattern-profile",
+        "个人资料卡",
+        Patterns,
+        Preset::Pattern(Pattern::Profile),
+        "profile user avatar 用户卡片 头像 个人信息"
+    ),
+    item!(
+        "pattern-stat",
+        "统计卡片",
+        Patterns,
+        Preset::Pattern(Pattern::Stat),
+        "stat metric KPI analytics dashboard 指标 数据看板 数据卡片"
+    ),
+    item!(
+        "pattern-login",
+        "登录表单",
+        Patterns,
+        Preset::Pattern(Pattern::Login),
+        "login sign in form email 验证码 邮箱"
+    ),
+    item!(
+        "pattern-search",
+        "搜索栏",
+        Patterns,
+        Preset::Pattern(Pattern::Search),
+        "search bar field 查找 搜索框"
+    ),
+    item!(
+        "pattern-tabs",
+        "标签页",
+        Patterns,
+        Preset::Pattern(Pattern::Tabs),
+        "tabs tab bar navigation 标签栏 选项卡"
+    ),
+    item!(
+        "pattern-pagination",
+        "分页栏",
+        Patterns,
+        Preset::Pattern(Pattern::Pagination),
+        "pagination pager page navigation 页码"
+    ),
+    item!(
+        "pattern-breadcrumb",
+        "面包屑",
+        Patterns,
+        Preset::Pattern(Pattern::Breadcrumb),
+        "breadcrumb path navigation 路径导航"
+    ),
+    item!(
+        "pattern-dialog",
+        "确认弹窗",
+        Patterns,
+        Preset::Pattern(Pattern::Dialog),
+        "modal confirmation dialog 确认框 对话框"
+    ),
+    item!(
+        "pattern-alert",
+        "提示横幅",
+        Patterns,
+        Preset::Pattern(Pattern::Alert),
+        "alert banner notification 通知 信息提示"
+    ),
+    item!(
+        "pattern-empty",
+        "空状态",
+        Patterns,
+        Preset::Pattern(Pattern::Empty),
+        "empty state placeholder 无数据 暂无内容"
+    ),
+    item!(
+        "pattern-progress",
+        "进度条",
+        Patterns,
+        Preset::Pattern(Pattern::Progress),
+        "progress bar loading 进度 加载"
     ),
 ];

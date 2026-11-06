@@ -41,6 +41,8 @@ impl eframe::Storage for MemoryStorage {
 
 pub(super) fn fixture(project: Project) -> App {
     App {
+        ai: ai_workbench::Workbench::new(false, "test-document".into()),
+        ai_reveal: Default::default(),
         saved: project.clone(),
         project,
         page: 0,
@@ -48,7 +50,9 @@ pub(super) fn fixture(project: Project) -> App {
         path: None,
         undo: Vec::new(),
         redo: Vec::new(),
-        clipboard: Vec::new(),
+        clipboard: Default::default(),
+        expanded_layer_groups: BTreeSet::new(),
+        layer_name_dialog: None,
         zoom: 0.5,
         view: CanvasView::default(),
         sidebar_layout: sidebar::SidebarLayout::default(),
@@ -181,6 +185,7 @@ fn old_tree_session(document: &OpenedDocument, path: PathBuf) -> Session {
         .unwrap()
         .remove("page_tree");
     Session {
+        ai_document_id: "test-document".into(),
         project: previous.clone(),
         saved: previous,
         path: Some(path),

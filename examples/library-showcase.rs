@@ -19,14 +19,20 @@ fn main() -> Result<()> {
         if items.is_empty() {
             continue;
         }
+        let (columns, column_width, min_row_height, min_height) = match category {
+            Category::Icons => (6, 205.0, 108.0, 720.0),
+            Category::Patterns => (3, 410.0, 90.0, 950.0),
+            _ => (3, 410.0, 330.0, 950.0),
+        };
         let mut page = Page {
             id: project.allocate_id(),
             name: category.label().into(),
             width: 1280.0,
-            height: (items.len().div_ceil(3) as f32 * 330.0 + 140.0).max(950.0),
+            height: min_height,
             canvas: Default::default(),
             background: "#FFFFFF".into(),
             widgets: Vec::new(),
+            group_names: Default::default(),
         };
         let mut heading = Widget::new(project.allocate_id(), WidgetKind::Text, 40.0, 28.0);
         heading.text = format!("{} · {} 项", category.label(), items.len());
@@ -41,18 +47,38 @@ fn main() -> Result<()> {
             bold: true,
         });
         page.widgets.push(heading);
-        for (index, item) in items.iter().enumerate() {
-            let x = 40.0 + (index % 3) as f32 * 410.0;
-            let y = 118.0 + (index / 3) as f32 * 330.0;
-            let mut caption = Widget::new(project.allocate_id(), WidgetKind::Text, x, y);
-            caption.text = format!("{:02}  {}", index + 1, item.label);
-            caption.width = 370.0;
-            caption.height = 28.0;
-            caption.font_size = 14.0;
-            caption.text_color = "#858A99".into();
-            page.widgets.push(caption);
-            page.widgets.extend(item.create(&mut project, x, y + 46.0));
+        let mut y = 118.0;
+        for (row_index, row) in items.chunks(columns).enumerate() {
+            let mut next_row = y + min_row_height;
+            for (column_index, item) in row.iter().enumerate() {
+                let x = 40.0 + column_index as f32 * column_width;
+                let mut caption = Widget::new(project.allocate_id(), WidgetKind::Text, x, y);
+                caption.text = format!(
+                    "{:02}  {}",
+                    row_index * columns + column_index + 1,
+                    item.label
+                );
+                caption.width = column_width - 40.0;
+                caption.height = 28.0;
+                caption.font_size = 14.0;
+                caption.text_color = if category == Category::Patterns {
+                    "#596681"
+                } else {
+                    "#858A99"
+                }
+                .into();
+                page.widgets.push(caption);
+                let widgets = item.create(&mut project, x, y + 46.0);
+                if category == Category::Patterns {
+                    next_row = widgets.iter().fold(next_row, |bottom, widget| {
+                        bottom.max(widget.y + widget.height + 26.0)
+                    });
+                }
+                page.widgets.extend(widgets);
+            }
+            y = next_row;
         }
+        page.height = (y + 22.0).max(min_height);
         project.pages.push(page);
     }
     project.save(&directory.join("library.rpshop"))?;

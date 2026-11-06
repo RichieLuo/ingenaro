@@ -16,6 +16,11 @@ impl App {
         } else {
             None
         };
+        let ai_document_id = restored
+            .as_ref()
+            .map(|s| s.ai_document_id.clone())
+            .filter(|id| !id.is_empty())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let native_state = restored.as_ref().and_then(|s| s.native_state.clone());
         let sidebar_layout = if screenshot.is_none() {
             cc.storage
@@ -170,7 +175,19 @@ impl App {
             .filter(|id| project.pages[page].widgets.iter().any(|w| w.id == *id))
             .into_iter()
             .collect();
-        Self {
+        let mut ai = ai_workbench::Workbench::new(!screenshot_mode && !cfg!(test), ai_document_id);
+        if args
+            .iter()
+            .any(|arg| arg == "--ai-design" || arg == "--ai-example")
+        {
+            ai.open_startup(args.iter().any(|arg| arg == "--ai-example"));
+        }
+        let qa_kind = screenshot_mode
+            .then(|| std::env::var("RPSHOP_QA_DIALOG").ok())
+            .flatten();
+        let mut app = Self {
+            ai,
+            ai_reveal: Default::default(),
             project,
             saved,
             page,
@@ -178,7 +195,9 @@ impl App {
             path,
             undo: vec![],
             redo: vec![],
-            clipboard: vec![],
+            clipboard: Default::default(),
+            expanded_layer_groups: BTreeSet::new(),
+            layer_name_dialog: None,
             zoom: 0.65,
             view: CanvasView::default(),
             sidebar_layout,
@@ -207,6 +226,10 @@ impl App {
             pending_open: None,
             native,
             cached_native_preview_source: None,
+        };
+        if let Some(kind) = qa_kind {
+            app.ai_seed_qa(&kind);
         }
+        app
     }
 }

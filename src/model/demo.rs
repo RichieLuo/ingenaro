@@ -705,6 +705,7 @@ fn sample_page(id: u64, name: &str) -> Page {
         canvas: CanvasMode::Fixed,
         background: "#F4F7FB".to_owned(),
         widgets: Vec::new(),
+        group_names: Default::default(),
     }
 }
 
