@@ -121,7 +121,7 @@ fn native_constraints(widgets: &[Widget]) -> Value {
         "required_template_kind":form.map(|w|w.kind),
         "requires_host_native_validation":true,
         "note":if panel {
-            "Native documents cannot create Panel containers; supported in RPShop projects."
+            "Native documents cannot create Panel containers; supported in Ingenaro projects."
         } else if form.is_some() {
             "The native host must find an actual template of this form type in the source document; availability is not guaranteed by the catalog."
         } else {

@@ -8,7 +8,6 @@ pub(in crate::ui::ai_workbench) enum Icon {
     Send,
     Stop,
     Plus,
-    History,
     Canvas,
     More,
 }
@@ -121,11 +120,6 @@ pub(in crate::ui::ai_workbench) fn paint_icon(
         Icon::Plus => {
             line((-5.0, 0.0), (5.0, 0.0));
             line((0.0, -5.0), (0.0, 5.0));
-        }
-        Icon::History => {
-            painter.circle_stroke(center, 6.0, stroke);
-            line((0.0, -4.0), (0.0, 0.0));
-            line((0.0, 0.0), (3.0, 2.0));
         }
         Icon::Canvas => {
             painter.rect_stroke(

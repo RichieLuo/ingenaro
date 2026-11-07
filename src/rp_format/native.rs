@@ -331,7 +331,7 @@ impl NativeDocument {
             }
             self.source.encode_with_parts(&replacements)?
         };
-        // Verify the entire staged container, including a new RPShop read of its
+        // Verify the entire staged container, including a new Ingenaro read of its
         // native page content, before touching the destination file.
         let verified = super::open_container(path, container::from_bytes(&bytes)?)
             .context("原生保存结果无法重新读取，原文件保持不变")?;

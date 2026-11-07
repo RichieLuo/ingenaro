@@ -173,7 +173,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
         .expect("fixture must contain an editable text widget");
     let widget = &mut edited.pages[page_index].widgets[widget_index];
     let id = widget.id;
-    widget.text = "RPShop 保存验证\n第二行".into();
+    widget.text = "Ingenaro 保存验证\n第二行".into();
     widget.font_size = 22.0;
     widget.rotation = 23.5;
     native.save(&edited, &destination).unwrap();
@@ -185,7 +185,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
         .flat_map(|p| &p.widgets)
         .find(|w| w.id == id)
         .unwrap();
-    assert_eq!(actual.text, "RPShop 保存验证\n第二行");
+    assert_eq!(actual.text, "Ingenaro 保存验证\n第二行");
     assert!((actual.font_size - 22.0).abs() < 0.001);
     assert!((actual.rotation - 23.5).abs() < 0.001);
     if legacy {
@@ -289,7 +289,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
         let mut added_project = native.project.clone();
         let added_id = added_project.allocate_id();
         let mut added = Widget::new(added_id, WidgetKind::Rectangle, 120.0, 160.0);
-        added.text = "RPShop 独立新增验证".into();
+        added.text = "Ingenaro 独立新增验证".into();
         added.font_size = 18.0;
         added.rotation = 12.0;
         expected_texts.push(added.text.clone());
@@ -313,7 +313,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
             .pages
             .iter()
             .flat_map(|p| &p.widgets)
-            .find(|w| w.text == "RPShop 独立新增验证")
+            .find(|w| w.text == "Ingenaro 独立新增验证")
             .unwrap();
         assert!((added.font_size - 18.0).abs() < 0.001);
         assert!((added.rotation - 12.0).abs() < 0.001);
@@ -366,15 +366,15 @@ fn check_native_fixture(variable: &str, legacy: bool) {
     let group_id = grouped.allocate_id();
     for widget in &mut grouped.pages[pair.0].widgets {
         if widget.id == pair.1 {
-            widget.name = "RPShop group member one".into();
+            widget.name = "Ingenaro group member one".into();
             widget.groups = vec![group_id];
         }
         if widget.id == pair.2 {
-            widget.name = "RPShop group member two".into();
+            widget.name = "Ingenaro group member two".into();
             widget.groups = vec![group_id];
         }
     }
-    crate::grouping::rename_group(&mut grouped.pages[pair.0], group_id, "RPShop named group")
+    crate::grouping::rename_group(&mut grouped.pages[pair.0], group_id, "Ingenaro named group")
         .unwrap();
     native.save(&grouped, &destination).unwrap();
     let members = native
@@ -385,7 +385,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
         .filter(|widget| {
             matches!(
                 widget.name.as_str(),
-                "RPShop group member one" | "RPShop group member two"
+                "Ingenaro group member one" | "Ingenaro group member two"
             )
         })
         .collect::<Vec<_>>();
@@ -397,16 +397,16 @@ fn check_native_fixture(variable: &str, legacy: bool) {
     let mut renamed = native.project.clone();
     assert_eq!(
         renamed.pages[pair.0].group_name(group_id),
-        "RPShop named group"
+        "Ingenaro named group"
     );
-    crate::grouping::rename_group(&mut renamed.pages[pair.0], group_id, "RPShop renamed group")
+    crate::grouping::rename_group(&mut renamed.pages[pair.0], group_id, "Ingenaro renamed group")
         .unwrap();
     native.save(&renamed, &destination).unwrap();
     assert!(
         native.project.pages[pair.0]
             .group_names
             .values()
-            .any(|name| name == "RPShop renamed group")
+            .any(|name| name == "Ingenaro renamed group")
     );
     let mut ungrouped = native.project.clone();
     for widget in ungrouped
@@ -416,7 +416,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
     {
         if matches!(
             widget.name.as_str(),
-            "RPShop group member one" | "RPShop group member two"
+            "Ingenaro group member one" | "Ingenaro group member two"
         ) {
             widget.groups.clear();
         }
@@ -431,7 +431,7 @@ fn check_native_fixture(variable: &str, legacy: bool) {
             .flat_map(|page| &page.widgets)
             .filter(|widget| matches!(
                 widget.name.as_str(),
-                "RPShop group member one" | "RPShop group member two"
+                "Ingenaro group member one" | "Ingenaro group member two"
             ))
             .all(|widget| widget.groups.is_empty())
     );

@@ -82,7 +82,7 @@ fn mock_model_updates_real_canvas_after_ui_approval_and_is_undoable() {
     assert!(app.ai.pending_tool.is_some(), "{}", app.ai.state);
     assert_eq!(app.project, original, "Tool cannot mutate before consent");
     let output = frame(&mut app, &context, vec![]);
-    let approve = text_center(&output, "允许本次 RPShop 工具操作");
+    let approve = text_center(&output, "允许本次 Ingenaro 工具操作");
     click(&mut app, &context, approve);
     while app.ai.running.is_some() && Instant::now() < deadline {
         frame(&mut app, &context, vec![]);

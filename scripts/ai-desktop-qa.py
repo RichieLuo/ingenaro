@@ -1,5 +1,5 @@
-"""Click only the launched RPShop HWND and request app-rendered screenshots.
-Usage: python -I scripts/ai-desktop-qa.py target/debug/rpshop.exe target/ai-desktop-qa
+"""Click only the launched Ingenaro HWND and request app-rendered screenshots.
+Usage: python -I scripts/ai-desktop-qa.py target/debug/ingenaro.exe target/ai-desktop-qa
 Uses stdlib; screenshot mode disables real session/config/recovery writes.
 """
 import ctypes
@@ -32,9 +32,9 @@ def main():
                 if path.is_file() and path.stat().st_size > 100:
                     return
                 if process.poll() is not None:
-                    raise RuntimeError("RPShop exited before screenshot")
+                    raise RuntimeError("Ingenaro exited before screenshot")
                 time.sleep(0.05)
-            raise RuntimeError(f"RPShop did not render {path.name}")
+            raise RuntimeError(f"Ingenaro did not render {path.name}")
         wait_for(first)
         callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         found = []
@@ -47,7 +47,7 @@ def main():
             return True
         user.EnumWindows(visit, 0)
         if not found:
-            raise RuntimeError("RPShop HWND not found by process ID")
+            raise RuntimeError("Ingenaro HWND not found by process ID")
         window = found[0]
         rect = wintypes.RECT()
         user.GetWindowRect(window, ctypes.byref(rect))

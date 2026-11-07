@@ -2,6 +2,8 @@
 mod table;
 
 use super::*;
+use design::{ChatActivity, ChatRole, ChatStep};
+use egui::text_selection::LabelSelectionState;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 
@@ -182,76 +184,203 @@ fn safe_link(url: &str) -> bool {
 
 impl App {
     pub(super) fn ai_conversation(&mut self, ui: &mut egui::Ui) {
+        let response = &self.ai.response;
+        let streaming = self.ai.running.is_some();
+        let show_response = streaming || !response.text.is_empty() || !response.steps.is_empty();
+        if self.ai.messages.is_empty() && !show_response {
+            return;
+        }
         let width = ui.available_width();
-        let kind = self
-            .ai
-            .settings
-            .engines
-            .iter()
-            .find(|engine| engine.id == self.ai.selected_engine)
-            .map(|engine| engine.kind);
-        for (index, (role, text)) in self.ai.messages.iter().enumerate() {
-            ui.push_id(("ai-chat-message", index), |ui| {
-                if role == "你" {
-                    user_message(ui, text, width);
-                } else {
-                    if index + 1 == self.ai.messages.len()
-                        && self.ai.running.is_none()
-                        && self.ai.streamed.is_empty()
-                    {
-                        reasoning(ui, &self.ai.reasoning, false);
-                    }
-                    assistant_header(ui, kind, false);
-                    markdown(ui, &mut self.ai.conversation.markdown, text);
-                    message_actions(ui, text, false);
-                }
-            });
-            ui.add_space(12.0);
-        }
-        if self.ai.running.is_some() || !self.ai.streamed.is_empty() {
-            ui.push_id("ai-current-response", |ui| {
-                reasoning(ui, &self.ai.reasoning, self.ai.running.is_some());
-                assistant_header(ui, kind, self.ai.running.is_some());
-                if self.ai.streamed.is_empty() {
-                    ui.label(RichText::new("正在处理你的需求…").size(12.0).color(MUTED));
-                } else {
-                    markdown(ui, &mut self.ai.conversation.markdown, &self.ai.streamed);
-                    if self.ai.running.is_none() {
-                        message_actions(ui, &self.ai.streamed, false);
-                    }
-                }
-            });
-            ui.add_space(16.0);
-        }
-        if !self.ai.changes.is_empty() {
-            ui.scope(|ui| {
-                ui.spacing_mut().item_spacing.y = 5.0;
-                egui::CollapsingHeader::new(
-                    RichText::new(format!("工具与变更 · {}", self.ai.changes.len()))
-                        .size(11.0)
-                        .color(MUTED),
-                )
-                .id_salt("ai-conversation-changes")
-                .show(ui, |ui| {
-                    for change in self.ai.changes.iter().rev().take(50) {
-                        ui.horizontal(|ui| {
-                            let color = if change == "工具执行失败" {
-                                Color32::from_rgb(184, 65, 65)
-                            } else {
-                                MUTED
-                            };
-                            let (rect, _) = ui.allocate_exact_size(vec2(9.0, 15.0), Sense::hover());
-                            ui.painter().circle_filled(rect.center(), 2.0, color);
-                            ui.add(
-                                egui::Label::new(RichText::new(change).size(11.0).color(color))
-                                    .wrap(),
-                            );
-                        });
+        let copy = begin_message_selection(ui);
+        ui.push_id(&self.ai.generation, |ui| {
+            for (index, message) in self.ai.messages.iter().enumerate() {
+                ui.push_id(index, |ui| {
+                    if message.role == ChatRole::User {
+                        user_message(ui, &message.text, width);
+                    } else {
+                        assistant_message(
+                            ui,
+                            &mut self.ai.conversation.markdown,
+                            &message.text,
+                            &message.steps,
+                            false,
+                        );
                     }
                 });
+                ui.add_space(12.0);
+            }
+            if show_response {
+                ui.push_id(self.ai.messages.len(), |ui| {
+                    assistant_message(
+                        ui,
+                        &mut self.ai.conversation.markdown,
+                        &response.text,
+                        &response.steps,
+                        streaming,
+                    );
+                });
+                ui.add_space(12.0);
+            }
+        });
+        if copy {
+            ui.input_mut(|input| {
+                input
+                    .events
+                    .retain(|event| !matches!(event, egui::Event::Copy))
             });
         }
     }
+}
+
+fn assistant_message(
+    ui: &mut egui::Ui,
+    cache: &mut CommonMarkCache,
+    text: &str,
+    steps: &[ChatStep],
+    streaming: bool,
+) {
+    ui.scope(|ui| {
+        let mut start = 0;
+        for group in steps.chunk_by(|a, b| a.after_text == b.after_text) {
+            let end = group[0].after_text;
+            if start < end {
+                let segment = ui.push_id(("reply", start), |ui| {
+                    markdown(ui, cache, &text[start..end])
+                });
+                message_context_menu(ui, &segment.response, text);
+            }
+            process(ui, group, streaming, streaming && end == text.len());
+            start = end;
+        }
+        if start < text.len() {
+            let segment = ui.push_id(("reply", start), |ui| markdown(ui, cache, &text[start..]));
+            message_context_menu(ui, &segment.response, text);
+        } else if streaming && steps.is_empty() {
+            ui.label(RichText::new("正在处理你的需求…").size(12.0).color(MUTED));
+        }
+    });
+    if !streaming {
+        message_actions(ui, text, false);
+    }
+}
+
+fn begin_message_selection(ui: &mut egui::Ui) -> bool {
+    let ctx = ui.ctx();
+    let selection = ctx.plugin::<LabelSelectionState>();
+    if ui.input(|input| input.pointer.button_pressed(egui::PointerButton::Secondary)) {
+        let selection = selection.lock();
+        let snapshot = selection.has_selection().then(|| selection.clone());
+        ctx.data_mut(|data| {
+            let id = egui::Id::new("chat-context-selection");
+            data.remove::<LabelSelectionState>(id);
+            if let Some(snapshot) = snapshot {
+                data.insert_temp(id, snapshot);
+            }
+        });
+    }
+    if let Some(snapshot) = ctx.data_mut(|data| {
+        data.remove_temp::<LabelSelectionState>(egui::Id::new("chat-copy-selection"))
+    }) {
+        *selection.lock() = snapshot;
+        ui.input_mut(|input| input.events.push(egui::Event::Copy));
+        true
+    } else {
+        false
+    }
+}
+
+fn message_context_menu(ui: &egui::Ui, response: &egui::Response, text: &str) {
+    let right_clicked = ui.rect_contains_pointer(response.rect)
+        && ui.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary));
+    egui::Popup::context_menu(response)
+        .open_memory(right_clicked.then_some(egui::containers::SetOpenCommand::Bool(true)))
+        .show(|ui| {
+            let selection = ui.ctx().data(|data| {
+                data.get_temp::<LabelSelectionState>(egui::Id::new("chat-context-selection"))
+            });
+            if ui
+                .add_enabled(selection.is_some(), egui::Button::new("复制选中文字"))
+                .clicked()
+                && let Some(selection) = selection
+            {
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(egui::Id::new("chat-copy-selection"), selection)
+                });
+                ui.ctx().request_repaint();
+                ui.close();
+            }
+            if ui.button("复制整条消息").clicked() {
+                ui.ctx().copy_text(text.to_owned());
+                ui.close();
+            }
+        });
+}
+
+fn process(ui: &mut egui::Ui, steps: &[ChatStep], streaming: bool, live: bool) {
+    let id = ui.make_persistent_id(("ai-process", steps[0].after_text));
+    let was_live = ui.ctx().data_mut(|data| {
+        let previous = data.get_temp::<bool>(id).unwrap_or(false);
+        data.insert_temp(id, live);
+        previous
+    });
+    let tools = steps
+        .iter()
+        .filter(|step| matches!(step.activity, ChatActivity::Tool { .. }))
+        .count();
+    let summary_only = steps
+        .iter()
+        .all(|step| matches!(step.activity, ChatActivity::Thinking { summary: true, .. }));
+    let title = match (tools, steps.len() - tools) {
+        (0, _) if summary_only => "思考摘要".into(),
+        (0, _) => "思考过程".into(),
+        (tools, 0) => format!("工具调用 · {tools}"),
+        (tools, _) => format!("思考与工具 · {tools} 次调用"),
+    };
+    egui::CollapsingHeader::new(
+        RichText::new(if live {
+            format!("{title} · 进行中")
+        } else {
+            title
+        })
+        .size(11.0)
+        .color(MUTED),
+    )
+    .id_salt(id)
+    .default_open(live)
+    .open((was_live && !live).then_some(false))
+    .show(ui, |ui| {
+        for (index, step) in steps.iter().enumerate() {
+            ui.push_id(index, |ui| match &step.activity {
+                ChatActivity::Thinking { text, summary } => {
+                    if *summary && !summary_only {
+                        ui.label(RichText::new("思考摘要").size(10.0).color(MUTED));
+                    }
+                    let response = ui.add(
+                        egui::Label::new(RichText::new(text).size(12.0).color(MUTED))
+                            .wrap()
+                            .selectable(true),
+                    );
+                    message_context_menu(ui, &response, text);
+                }
+                ChatActivity::Tool { name, outcome } => {
+                    let (status, color) = match outcome {
+                        Some(true) => ("已完成", MUTED),
+                        Some(false) => ("失败", Color32::from_rgb(184, 65, 65)),
+                        None if streaming => ("执行中", MUTED),
+                        None => ("未返回结果", MUTED),
+                    };
+                    let label = format!("{name} · {status}");
+                    let response = ui.add(
+                        egui::Label::new(RichText::new(&label).size(11.0).color(color))
+                            .wrap()
+                            .selectable(true),
+                    );
+                    message_context_menu(ui, &response, &label);
+                }
+            });
+        }
+    });
+    ui.add_space(6.0);
 }
 
 fn user_message(ui: &mut egui::Ui, text: &str, width: f32) {
@@ -286,28 +415,9 @@ fn user_message(ui: &mut egui::Ui, text: &str, width: f32) {
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("ai-user-bubble-test"), bubble.response.rect)
         });
-        let _ = bubble;
+        message_context_menu(ui, &bubble.response, text);
         message_actions(ui, text, true);
     });
-}
-
-fn assistant_header(ui: &mut egui::Ui, kind: Option<ai::EngineKind>, streaming: bool) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        if let Some(kind) = kind {
-            engine_icons::inline(ui, kind, 16.0);
-        }
-        ui.label(
-            RichText::new("RPShop 助手")
-                .size(11.0)
-                .strong()
-                .color(Color32::from_rgb(100, 108, 126)),
-        );
-        if streaming {
-            ui.label(RichText::new("正在回复").size(10.0).color(MUTED));
-        }
-    });
-    ui.add_space(4.0);
 }
 
 fn message_actions(ui: &mut egui::Ui, text: &str, user: bool) {
@@ -346,47 +456,6 @@ fn message_actions(ui: &mut egui::Ui, text: &str, user: bool) {
             ui.ctx().data_mut(|data| data.insert_temp(id, until));
         }
     });
-}
-
-fn reasoning(ui: &mut egui::Ui, text: &str, streaming: bool) {
-    if text.trim().is_empty() {
-        return;
-    }
-    egui::CollapsingHeader::new(
-        RichText::new(if streaming {
-            "思考摘要 · 实时"
-        } else {
-            "思考摘要"
-        })
-        .size(11.0)
-        .color(MUTED),
-    )
-    .id_salt("ai-public-reasoning")
-    .default_open(streaming)
-    .show(ui, |ui| {
-        let response = egui::Frame::new()
-            .inner_margin(egui::Margin {
-                left: 11,
-                right: 4,
-                top: 4,
-                bottom: 5,
-            })
-            .show(ui, |ui| {
-                ui.label(
-                    RichText::new(text)
-                        .size(12.0)
-                        .color(Color32::from_rgb(127, 134, 150)),
-                );
-                ui.label(RichText::new("CLI 公开摘要").size(9.0).color(MUTED))
-                    .on_hover_text("仅展示引擎公开提供的摘要，不代表隐藏的完整推理。");
-            });
-        let rect = response.response.rect;
-        ui.painter().line_segment(
-            [rect.left_top(), rect.left_bottom()],
-            Stroke::new(2.0, Color32::from_rgb(222, 218, 235)),
-        );
-    });
-    ui.add_space(6.0);
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 // Run the real Windows embedded WebView in isolated screenshot mode; never call a model.
-// node scripts/ai-webview-qa.mjs target/debug/rpshop.exe target/ai-webview-qa
+// node scripts/ai-webview-qa.mjs target/debug/ingenaro.exe target/ai-webview-qa
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -21,7 +21,7 @@ let socket;
 try {
   let pages;
   for (let n = 0; n < 100; n++) {
-    if (child.exitCode !== null) throw new Error('RPShop exited before WebView was ready');
+    if (child.exitCode !== null) throw new Error('Ingenaro exited before WebView was ready');
     try {
       pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       if (pages.some(page => page.type === 'page')) break;

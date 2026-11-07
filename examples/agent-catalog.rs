@@ -1,7 +1,7 @@
 //! No-model diagnostic: lists CLI model metadata, never sends a user prompt or starts a turn.
 fn main() {
-    for config in rpshop::ai::local_defaults() {
-        match rpshop::ai::discover_models(&config) {
+    for config in ingenaro::ai::local_defaults() {
+        match ingenaro::ai::discover_models(&config) {
             Ok(catalog) => println!(
                 "{}",
                 serde_json::json!({"engine":config.name,"catalog":catalog})

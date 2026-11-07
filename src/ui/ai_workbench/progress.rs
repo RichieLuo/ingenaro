@@ -1,4 +1,4 @@
-//! Honest task feedback: elapsed wall time and public CLI summaries, never synthetic thought.
+//! Live turn state based on engine events and elapsed wall time.
 use super::*;
 
 impl App {
@@ -27,10 +27,15 @@ impl App {
                 .unwrap_or(0);
             let phase = if self.ai.pending_tool.is_some() || self.ai.pending_approval.is_some() {
                 "等待授权"
-            } else if !self.ai.streamed.is_empty() {
+            } else if let Some(step) = self.ai.response.steps.last()
+                && step.after_text == self.ai.response.text.len()
+            {
+                match step.activity {
+                    design::ChatActivity::Thinking { .. } => "正在思考",
+                    design::ChatActivity::Tool { .. } => "正在执行工具",
+                }
+            } else if !self.ai.response.text.is_empty() {
                 "正在回复"
-            } else if !self.ai.reasoning.is_empty() {
-                "正在思考"
             } else if matches!(self.ai.state.as_str(), "starting" | "正在连接引擎…") {
                 "正在连接智能体"
             } else {

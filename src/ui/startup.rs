@@ -56,7 +56,7 @@ impl App {
         if let Some(path) = &path
             && is_native_path(path)
         {
-            match rpshop::rp_format::open(path) {
+            match ingenaro::rp_format::open(path) {
                 Ok(mut document) => {
                     let fresh = document.project.clone();
                     match restore_native_context(
@@ -108,17 +108,17 @@ impl App {
             && native.is_none()
             && args.iter().any(|arg| arg == "--interaction-example");
         if interaction_example && let Some(widget) = project.pages[0].widgets.first() {
-            let mut event = rpshop::model::AuthoredEvent::new(
+            let mut event = ingenaro::model::AuthoredEvent::new(
                 project.pages[0].id,
                 None,
-                rpshop::model::EventTrigger::PageLoad,
+                ingenaro::model::EventTrigger::PageLoad,
             );
             event.name = "页面载入".into();
-            event.actions.push(rpshop::model::Interaction {
+            event.actions.push(ingenaro::model::Interaction {
                 action: Action::SetText,
                 target_page: None,
                 target_widget: Some(widget.id),
-                value: "欢迎使用 RPShop".into(),
+                value: "欢迎使用 Ingenaro".into(),
             });
             project.interaction_events.push(event);
             saved = project.clone();
@@ -136,7 +136,7 @@ impl App {
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         let logo = Some(crate::branding::title_texture(&cc.egui_ctx));
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        let logo = image::load_from_memory(include_bytes!("../../assets/branding/rpshop-icon.png"))
+        let logo = image::load_from_memory(include_bytes!("../../assets/branding/ingenaro-icon.png"))
             .ok()
             .map(|img| {
                 // The header displays this at 38 logical pixels. Keep a prefiltered

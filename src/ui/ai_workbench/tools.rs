@@ -129,9 +129,6 @@ impl App {
 
     fn ai_dispatch_tool(&mut self, ctx: &egui::Context, request: automation::ToolRequest) {
         let result = self.execute_ai_tool_guarded(ctx, &request.call, Some(&request));
-        if let Err(error) = &result {
-            self.ai.changes.push(format!("工具未应用：{error}"));
-        }
         let _ = request.reply.send(result);
     }
 
@@ -308,9 +305,7 @@ impl App {
                     },
                     false,
                 );
-                self.ai
-                    .changes
-                    .push("已发布独立 HTML 产物 · 原生工程未改动".into());
+                self.status = "已发布独立 HTML 产物".into();
                 Ok(json!({"published":true,"kind":"html","bytes":source.len()}))
             }
             "rpshop_list_versions" => {
@@ -376,9 +371,6 @@ impl App {
                 ctx.input(|input| input.time),
             );
             ctx.request_repaint();
-            self.ai
-                .changes
-                .push("文档事务已应用 · 可撤销 / 重做".into());
             self.status = "AI 已修改当前工程 · Ctrl+Z 可撤销".into();
         }
         Ok(result)
@@ -451,7 +443,7 @@ impl App {
                 }
                 dialog_style::actions(ui, |ui| {
                     if ui
-                        .add(dialog_style::primary("允许本次 RPShop 工具操作", PURPLE))
+                        .add(dialog_style::primary("允许本次 Ingenaro 工具操作", PURPLE))
                         .clicked()
                     {
                         tool_answer = Some(true);

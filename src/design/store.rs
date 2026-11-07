@@ -9,9 +9,11 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::ai::ComposerPreferences;
+
 use super::{
-    ArtifactContent, ArtifactKind, ChatRecord, ChatRole, Revision, RevisionOrigin, Scope, Session,
-    types::text,
+    ArtifactContent, ArtifactKind, ChatRecord, ChatRole, ChatStep, Revision, RevisionOrigin, Scope,
+    Session, types::text,
 };
 
 pub const MAX_STORE_BYTES: usize = 64 * 1024 * 1024;
@@ -82,8 +84,8 @@ impl Store {
     }
 
     pub fn open_default() -> Result<Self> {
-        let directories = directories::ProjectDirs::from("", "RPShop", "RPShop")
-            .context("无法定位 RPShop 应用数据目录")?;
+        let directories = directories::ProjectDirs::from("", "Ingenaro", "Ingenaro")
+            .context("无法定位 Ingenaro 应用数据目录")?;
         Self::open(directories.data_local_dir().join("design"))
     }
 
@@ -112,8 +114,21 @@ impl Store {
         kind: ArtifactKind,
         title: &str,
     ) -> Result<u64> {
+        self.create_session_with_preferences(scope, kind, title, None)
+    }
+
+    pub fn create_session_with_preferences(
+        &mut self,
+        scope: &Scope,
+        kind: ArtifactKind,
+        title: &str,
+        preferences: Option<ComposerPreferences>,
+    ) -> Result<u64> {
         scope.validate()?;
         text(title, 512, "会话标题")?;
+        if let Some(preferences) = &preferences {
+            preferences.validate().map_err(anyhow::Error::msg)?;
+        }
         ensure!(
             self.data.sessions.len() < MAX_SESSIONS,
             "设计会话已达 64 个，请先删除不需要的会话"
@@ -128,10 +143,35 @@ impl Store {
                 kind,
                 created_at_ms: now,
                 updated_at_ms: now,
+                composer_preferences: preferences,
                 messages: Vec::new(),
                 revisions: Vec::new(),
             });
             Ok(id)
+        })
+    }
+
+    pub fn set_composer_preferences(
+        &mut self,
+        scope: &Scope,
+        id: u64,
+        preferences: ComposerPreferences,
+    ) -> Result<()> {
+        preferences.validate().map_err(anyhow::Error::msg)?;
+        if self.session(scope, id)?.composer_preferences.as_ref() == Some(&preferences) {
+            return Ok(());
+        }
+        self.transact(|data| {
+            session_mut(data, scope, id)?.composer_preferences = Some(preferences);
+            Ok(())
+        })
+    }
+
+    pub fn set_session_title(&mut self, scope: &Scope, id: u64, title: &str) -> Result<()> {
+        text(title, 512, "会话标题")?;
+        self.transact(|data| {
+            session_mut(data, scope, id)?.title = title.into();
+            Ok(())
         })
     }
 
@@ -142,7 +182,28 @@ impl Store {
         role: ChatRole,
         message: &str,
     ) -> Result<u64> {
-        text(message, 128 * 1024, "对话内容")?;
+        self.append_chat(scope, session_id, role, message, &[])
+    }
+
+    pub fn append_response(
+        &mut self,
+        scope: &Scope,
+        session_id: u64,
+        message: &str,
+        steps: &[ChatStep],
+    ) -> Result<u64> {
+        self.append_chat(scope, session_id, ChatRole::Assistant, message, steps)
+    }
+
+    fn append_chat(
+        &mut self,
+        scope: &Scope,
+        session_id: u64,
+        role: ChatRole,
+        message: &str,
+        steps: &[ChatStep],
+    ) -> Result<u64> {
+        validate_chat(role, message, steps)?;
         ensure!(
             self.session(scope, session_id)?.messages.len() < MAX_MESSAGES,
             "单会话对话已达 256 条，请新建设计会话"
@@ -156,6 +217,7 @@ impl Store {
                 role,
                 text: message.into(),
                 created_at_ms: now,
+                steps: steps.to_vec(),
             });
             session.updated_at_ms = now;
             Ok(id)
@@ -284,13 +346,16 @@ fn validate_data(data: &Data) -> Result<()> {
         check_id(session.id)?;
         session.scope.validate()?;
         text(&session.title, 512, "会话标题")?;
+        if let Some(preferences) = &session.composer_preferences {
+            preferences.validate().map_err(anyhow::Error::msg)?;
+        }
         ensure!(
             session.messages.len() <= MAX_MESSAGES && session.revisions.len() <= MAX_REVISIONS,
             "会话内容数量过多"
         );
         for message in &session.messages {
             check_id(message.id)?;
-            text(&message.text, 128 * 1024, "对话内容")?;
+            validate_chat(message.role, &message.text, &message.steps)?;
         }
         for revision in &session.revisions {
             check_id(revision.id)?;
@@ -303,6 +368,31 @@ fn validate_data(data: &Data) -> Result<()> {
         }
     }
     ensure!(data.next_id > 0, "设计记录序号无效");
+    Ok(())
+}
+
+fn validate_chat(role: ChatRole, message: &str, steps: &[ChatStep]) -> Result<()> {
+    if role == ChatRole::Assistant && !steps.is_empty() {
+        ensure!(
+            message.len() <= 4 * 1024 * 1024 && !message.contains('\0'),
+            "助手回复内容无效"
+        );
+    } else {
+        let limit = if role == ChatRole::Assistant {
+            4 * 1024 * 1024
+        } else {
+            128 * 1024
+        };
+        text(message, limit, "对话内容")?;
+    }
+    let mut after = 0;
+    for step in steps {
+        ensure!(
+            step.after_text >= after && message.is_char_boundary(step.after_text),
+            "对话步骤位置无效"
+        );
+        after = step.after_text;
+    }
     Ok(())
 }
 

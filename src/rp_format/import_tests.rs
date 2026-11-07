@@ -285,7 +285,7 @@ fn caller_selected_page_tree_survives_native_page_rename() {
     std::fs::create_dir(&directory).unwrap();
     let destination = directory.join("page-tree-roundtrip.rp");
     let mut edited = native.project.clone();
-    edited.pages[0].name = "RPShop page rename verification".into();
+    edited.pages[0].name = "Ingenaro page rename verification".into();
     let expected_names = edited
         .pages
         .iter()

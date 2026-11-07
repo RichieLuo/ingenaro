@@ -256,7 +256,7 @@ fn clicking_finished_thumbnail_opens_its_canvas_without_interrupting_other_work(
 
 #[test]
 fn landscape_mobile_and_auto_previews_keep_native_output_ratio_and_origin() {
-    use rpshop::model::CanvasMode;
+    use ingenaro::model::CanvasMode;
     let mut page = Project::blank().pages.remove(0);
     let stage = Rect::from_min_size(Pos2::new(12.0, 42.0), vec2(320.0, 220.0));
     for (width, height) in [(1440.0, 900.0), (390.0, 844.0)] {

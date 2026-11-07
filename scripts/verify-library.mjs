@@ -1,17 +1,17 @@
 // Verify real exported form controls in installed Edge without npm dependencies.
-// Build first, then: node scripts/verify-library.mjs [path-to-rpshop.exe]
+// Build first, then: node scripts/verify-library.mjs [path-to-ingenaro.exe]
 import {spawn} from 'node:child_process';
 import {readFile, writeFile, mkdir, mkdtemp} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const root=path.resolve(import.meta.dirname,'..');
-const binary=path.resolve(process.argv[2]||path.join(root,'target/debug/rpshop.exe'));
+const binary=path.resolve(process.argv[2]||path.join(root,'target/debug/ingenaro.exe'));
 const edge='C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const target=path.join(root,'target/library-browser-qa');
 await mkdir(target,{recursive:true});
 const directory=await mkdtemp(path.join(target,'run-'));
-const gallery=JSON.parse(await readFile(path.join(root,'examples/library.rpshop'),'utf8'));
+const gallery=JSON.parse(await readFile(path.join(root,'examples/library.ingenaro'),'utf8'));
 const template=gallery.pages[0].widgets[0];
 function widget(id,kind,text,name=kind){return {...structuredClone(template),id,kind,name,text,
     x:20,y:id*5,width:260,height:kind==='TextArea'||kind==='ListBox'?120:40,
@@ -40,7 +40,7 @@ widgets.push(reversed);
 const page=(id,widgets)=>({id,name:'QA '+id,width:1000,height:900,canvas:'Fixed',background:'#FFFFFF',widgets});
 const project={version:1,name:'Independent library controls QA',pages:[page(1,widgets),
     page(100,[widget(101,'Radio','Other page','choices')])],page_tree:[],interaction_events:[],next_id:1000};
-const projectPath=path.join(directory,'controls.rpshop');
+const projectPath=path.join(directory,'controls.ingenaro');
 await writeFile(projectPath,JSON.stringify(project));
 const server=spawn(binary,['--preview-server',projectPath],{cwd:root,windowsHide:true,stdio:['pipe','pipe','pipe']});
 let errors='';server.stderr.on('data',data=>errors+=data);

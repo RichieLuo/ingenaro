@@ -236,7 +236,7 @@ fn execute_inner(
         name if schema::GUI_TOOLS.contains(&name) => {
             Err(format!("{name} must be handled by the live GUI host"))
         }
-        _ => Err(format!("Unknown RPShop tool: {}", call.name)),
+        _ => Err(format!("Unknown Ingenaro tool: {}", call.name)),
     }
 }
 

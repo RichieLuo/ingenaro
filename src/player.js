@@ -2,7 +2,7 @@
 const data=JSON.parse(document.getElementById('prototype-data').textContent);
 const byId=id=>document.getElementById(id),viewport=byId('viewport'),holder=byId('stage-holder');
 const pages=new Map(data.pages.map(page=>[page.id,page]));
-const nativeRuntime=data.native?window.createRPShopPrototype(data.native,{viewport,navigate(key){const page=data.pages.find(page=>page.key===key);if(page){nativeRuntime.reset();navigate(page.id)}},open(key){const page=data.pages.find(page=>page.key===key);if(page)window.open(location.pathname+location.search+hashFor(page.id),'_blank','noopener')}}):null;
+const nativeRuntime=data.native?window.createIngenaroPrototype(data.native,{viewport,navigate(key){const page=data.pages.find(page=>page.key===key);if(page){nativeRuntime.reset();navigate(page.id)}},open(key){const page=data.pages.find(page=>page.key===key);if(page)window.open(location.pathname+location.search+hashFor(page.id),'_blank','noopener')}}):null;
 const tree=data.page_tree,expanded=new Set(),pageAncestors=new Map(),branchKeys=[];
 let authoredDepth=0;
 let current=data.initialPage,navOpen=false,zoomMode='100',hotspots=false,playerVisible=true,navWidth=220,search='';

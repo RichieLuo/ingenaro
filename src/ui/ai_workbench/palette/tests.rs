@@ -167,7 +167,7 @@ fn chat_applies_confirmed_palette_and_scoped_edits_without_opening_settings() {
         return;
     };
     let ctx = egui::Context::default();
-    let project_path = files.0.join("project.rpshop");
+    let project_path = files.0.join("project.ingenaro");
     let settings_path = files.0.join("ai-settings.json");
     let mut original = app();
     files.configure(&mut original);
@@ -275,7 +275,7 @@ impl MockFiles {
 
 impl Drop for MockFiles {
     fn drop(&mut self) {
-        for name in ["mock.js", "project.rpshop", "ai-settings.json"] {
+        for name in ["mock.js", "project.ingenaro", "ai-settings.json"] {
             let _ = std::fs::remove_file(self.0.join(name));
         }
         let _ = std::fs::remove_dir(&self.0);

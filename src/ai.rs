@@ -23,7 +23,10 @@ mod real_engine_tests;
 mod runtime;
 mod steering;
 
-pub use config::{AiSettings, EngineConfig, EngineKind, ReasoningEffort};
+pub use config::{
+    AiSettings, ComposerPreferences, EngineConfig, EngineKind, PermissionMode, ReasoningEffort,
+    ReasoningPreference,
+};
 pub use credentials::{CredentialStore, SessionKeys};
 pub use runtime::{AiRuntime, RunningSession, SessionControl};
 
@@ -33,7 +36,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::AtomicBool};
 
-/// Registered RPShop capabilities; used for host-gated CLI permission delegation.
+/// Registered Ingenaro capabilities; used for host-gated CLI permission delegation.
 pub fn is_local_tool(name: &str) -> bool {
     crate::automation::is_design_tool(name)
 }
@@ -50,7 +53,7 @@ pub struct SessionBinding {
     pub tool_revision: u32,
 }
 
-/// Ephemeral RPShop MCP bridge credentials, never persisted in engine settings.
+/// Ephemeral Ingenaro MCP bridge credentials, never persisted in engine settings.
 #[derive(Clone)]
 pub struct McpEndpoint {
     pub endpoint: String,
@@ -87,9 +90,11 @@ pub enum AiEvent {
     TextDelta {
         text: String,
     },
-    /// Public reasoning summaries/progress emitted by the CLI, never raw reasoning.
+    /// Reasoning text exposed by the engine, with explicit summary fallback.
     ReasoningDelta {
         text: String,
+        #[serde(default)]
+        summary: bool,
     },
     State {
         state: String,

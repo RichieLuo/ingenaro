@@ -19,7 +19,7 @@ fn agent_transaction_updates_live_document_undo_redo_and_save() {
     assert_eq!(app.project, before);
     app.redo();
     assert_eq!(app.project.pages[0].widgets[0].text, "Agent 创建的设计标题");
-    let path = std::env::temp_dir().join(format!("rpshop-ai-live-{}.rpshop", uuid::Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("rpshop-ai-live-{}.ingenaro", uuid::Uuid::new_v4()));
     app.write_document(&path).unwrap();
     assert_eq!(Project::load(&path).unwrap(), app.project);
     std::fs::remove_file(path).unwrap();

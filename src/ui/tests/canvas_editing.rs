@@ -172,8 +172,8 @@ fn reflected_line_geometry_matches_canvas_hits_and_both_exports() {
     let line = &app.project.pages[0].widgets[0];
     assert!(manipulation::hit_test(line, [130.0, 20.0], 1.0));
     assert!(!manipulation::hit_test(line, [10.0, 20.0], 1.0));
-    let html = rpshop::export::html(&app.project).unwrap();
-    let svg = rpshop::export::svg(&app.project.pages[0]).unwrap();
+    let html = ingenaro::export::html(&app.project).unwrap();
+    let svg = ingenaro::export::svg(&app.project.pages[0]).unwrap();
     assert!(html.contains("x1=\"120\" y1=\"0\" x2=\"0\" y2=\"60\""));
     assert!(svg.contains("x1=\"130\" y1=\"20\" x2=\"10\" y2=\"80\""));
     assert_eq!(app.undo.len(), 1);
@@ -231,7 +231,7 @@ fn drawing_tool_drag_uses_document_coordinates_and_escape_cancels_creation() {
     assert_eq!(app.project.pages[0].widgets.len(), 2);
     let line = app.project.pages[0].widgets.last().unwrap();
     assert_eq!(
-        rpshop::vector_edit::line_endpoints(line),
+        ingenaro::vector_edit::line_endpoints(line),
         [[400.0, 320.0], [500.0, 260.0]]
     );
     let _ = frame(

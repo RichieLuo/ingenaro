@@ -1,4 +1,4 @@
-// Dependency-free browser QA for the RPShop design sandbox and built-in sample.
+// Dependency-free browser QA for the Ingenaro design sandbox and built-in sample.
 // First emit the actual Rust preview wrapper:
 // RPSHOP_DESIGN_QA_OUTPUT=target/ai-browser-qa cargo test --lib design::
 // Then: node scripts/ai-browser-qa.mjs [wrapper.html] [installed-browser.exe]

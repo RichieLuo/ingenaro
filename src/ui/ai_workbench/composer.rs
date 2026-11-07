@@ -5,6 +5,7 @@ use super::*;
 #[cfg(test)]
 mod effort_tests;
 mod icons;
+mod input;
 #[cfg(test)]
 mod layout_tests;
 #[cfg(test)]
@@ -99,9 +100,24 @@ impl App {
                                 ui.menu_button(
                                     RichText::new("＋").size(17.0).color(SECONDARY),
                                     |ui| {
-                                        if ui.button("添加参考图片…").clicked(){self.ai_pick_images();ui.close();}
-                                        if ui.button("粘贴剪贴板图片").clicked(){self.ai_paste_image();ui.close();}
-                                        if ui.button("添加参考文件…").on_hover_text("发送后，所选引擎可读取附带的 UTF-8 源码或文本").clicked(){self.ai_pick_reference_files();ui.close();}
+                                        if ui.button("添加参考图片…").clicked() {
+                                            self.ai_pick_images();
+                                            ui.close();
+                                        }
+                                        if ui.button("粘贴剪贴板图片").clicked() {
+                                            self.ai_paste_image();
+                                            ui.close();
+                                        }
+                                        if ui
+                                            .button("添加参考文件…")
+                                            .on_hover_text(
+                                                "发送后，所选引擎可读取附带的 UTF-8 源码或文本",
+                                            )
+                                            .clicked()
+                                        {
+                                            self.ai_pick_reference_files();
+                                            ui.close();
+                                        }
                                         ui.separator();
                                         ui.label(RichText::new("引用设计上下文").strong());
                                         for (context, label) in [
@@ -162,7 +178,12 @@ impl App {
                                                     SECONDARY,
                                                 );
                                                 #[cfg(test)]
-                                                ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("ai-reference-remove-test"), remove.rect));
+                                                ui.ctx().data_mut(|data| {
+                                                    data.insert_temp(
+                                                        egui::Id::new("ai-reference-remove-test"),
+                                                        remove.rect,
+                                                    )
+                                                });
                                                 if remove.clicked() {
                                                     self.ai.references.remove();
                                                     changed_reference = Some(3);
@@ -199,41 +220,15 @@ impl App {
                 self.ai_images_strip(ui);
                 let file_height = self.ai_reference_files_height();
                 self.ai_reference_files_strip(ui);
-                let toolbar_height=toolbar::TOOLBAR_HEIGHT;
-                let height = (self.ai.composer_height - 36.0 - toolbar_height - 14.0 - self.ai_images_height() - file_height).max(32.0);
-                let was_focused = ui.memory(|memory| memory.has_focus(editor_id));
-                let composing = self.ai.ime_active;
-                let mut ime_commit = false;
-                for event in ui.input(|i| i.events.clone()) {
-                    if !was_focused {
-                        break;
-                    }
-                    if let egui::Event::Ime(event) = event {
-                        match event {
-                            egui::ImeEvent::Enabled | egui::ImeEvent::Preedit(_) => {
-                                self.ai.ime_active = true
-                            }
-                            egui::ImeEvent::Commit(_) => {
-                                self.ai.ime_active = false;
-                                ime_commit = true;
-                            }
-                            egui::ImeEvent::Disabled => self.ai.ime_active = false,
-                        }
-                    }
-                }
-                // Consume Enter before TextEdit; IME confirmation must never send.
-                if was_focused
-                    && !composing
-                    && !self.ai.ime_active
-                    && !ime_commit
-                    && ui.input_mut(|input| {
-                        let submit=input.events.iter().any(|event|matches!(event,egui::Event::Key{key:egui::Key::Enter,pressed:true,modifiers,..} if *modifiers==egui::Modifiers::NONE));
-                        if submit {input.events.retain(|event|!matches!(event,egui::Event::Key{key:egui::Key::Enter,pressed:true,modifiers,..} if *modifiers==egui::Modifiers::NONE));}
-                        submit
-                    })
-                {
-                    send = true;
-                }
+                let toolbar_height = toolbar::TOOLBAR_HEIGHT;
+                let height = (self.ai.composer_height
+                    - 36.0
+                    - toolbar_height
+                    - 14.0
+                    - self.ai_images_height()
+                    - file_height)
+                    .max(32.0);
+                send |= input::handle_keys(ui, editor_id, &mut self.ai.ime_active);
                 egui::Frame::new()
                     .inner_margin(egui::Margin::symmetric(10, 7))
                     .show(ui, |ui| {
@@ -242,6 +237,7 @@ impl App {
                             .max_height(height)
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
+                                let selection = input::selection_before_right_click(ui, editor_id);
                                 let edit = ui.add_sized(
                                     [ui.available_width(), height],
                                     egui::TextEdit::multiline(&mut self.ai.prompt)
@@ -255,10 +251,27 @@ impl App {
                                             egui::Modifiers::SHIFT,
                                             egui::Key::Enter,
                                         ))
-                                        .hint_text(RichText::new("描述你的设计，选中元件会自动引用，Enter 发送").color(Color32::from_rgb(157,164,178))),
+                                        .hint_text(
+                                            RichText::new(
+                                                "描述你的设计，选中元件会自动引用，Enter 发送",
+                                            )
+                                            .color(Color32::from_rgb(157, 164, 178)),
+                                        ),
                                 );
                                 if !edit.has_focus() {
                                     self.ai.ime_active = false;
+                                }
+                                #[cfg(windows)]
+                                if edit.has_focus() {
+                                    // Place the Windows candidate window at the caret, even in a tall composer.
+                                    ui.output_mut(|output| {
+                                        if let Some(ime) = &mut output.ime {
+                                            ime.rect = ime.cursor_rect;
+                                        }
+                                    });
+                                }
+                                if input::context_menu(&edit, &self.ai.prompt, selection) {
+                                    self.ai_paste_image();
                                 }
                             });
                     });
@@ -287,10 +300,15 @@ impl App {
                         sw: 9,
                         se: 9,
                     })
-                    .inner_margin(egui::Margin::symmetric(10,8))
-                    .show(ui,|ui|{send|=self.ai_composer_toolbar(ui);});
+                    .inner_margin(egui::Margin::symmetric(10, 8))
+                    .show(ui, |ui| {
+                        send |= self.ai_composer_toolbar(ui);
+                    });
             });
-        if send && (!self.ai.prompt.trim().is_empty() || !self.ai.images.is_empty()) {
+        if send
+            && !self.ai.ime_active
+            && (!self.ai.prompt.trim().is_empty() || !self.ai.images.is_empty())
+        {
             self.ai_start();
         }
         ui.add_space(2.0);

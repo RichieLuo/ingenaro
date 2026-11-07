@@ -3201,7 +3201,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpshop"
+name = "ingenaro"
 version = "1.0.0"
 dependencies = [
  "anyhow",

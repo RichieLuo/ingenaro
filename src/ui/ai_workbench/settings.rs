@@ -79,7 +79,16 @@ impl App {
                 let current=self.ai.settings.engines[index].model.clone();
                 let label=self.ai_model_display(&id,&current);
                 egui::ComboBox::from_id_salt(("settings-model",&id)).selected_text(label).width(260.0).show_ui(ui,|ui|{
-                    if let Some(model)=self.ai_model_picker(ui,&id,&current){self.ai.settings.engines[index].model=model;ui.close();}
+                    if let Some(model) = self.ai_model_picker(ui, &id, &current) {
+                        if model != current {
+                            self.ai.settings.engines[index].model = model;
+                            if let Some(preferences) = self.ai.settings.composer_preferences.get_mut(&id) {
+                                preferences.model = None;
+                                preferences.effort = ai::ReasoningPreference::Engine;
+                            }
+                        }
+                        ui.close();
+                    }
                 });
                 ui.label(RichText::new("模型来自该 CLI 的实时目录；不需要手动填写名称。").small().color(MUTED));
                 ui.add_space(8.0);
@@ -101,13 +110,24 @@ impl App {
                     if ui.add(dialog_style::primary("保存并使用",PURPLE)).clicked(){
                         self.ai.settings.default_engine_id.get_or_insert(id.clone());
                         let result=if self.ai.persist{self.ai.settings.save_default()}else{Ok(())};
-                        match result{Ok(())=>{self.ai.isolate();self.ai_choose_local(id.clone());self.ai.state="本地智能体设置已保存".into();self.ai.settings_open=false;},Err(error)=>self.ai.diagnosis=error}
+                        match result {
+                            Ok(()) => {
+                                if self.ai.selected_engine == id {
+                                    self.ai.isolate();
+                                    self.ai.restore_composer_preferences(None);
+                                }
+                                self.ai_choose_local(id.clone());
+                                self.ai.state = "本地智能体设置已保存".into();
+                                self.ai.settings_open = false;
+                            }
+                            Err(error) => self.ai.diagnosis = error,
+                        }
                     }
                 });
             });
             if let Some(id)=choose{self.ai.settings_engine=id;}
             if !self.ai.diagnosis.is_empty(){ui.separator();ui.label(&self.ai.diagnosis);}
-            ui.separator();ui.label(RichText::new("认证由 CLI 自己管理。RPShop 不读取登录 Token、不改写全局 CLI 设置；模型目录检测不发送生成需求。").small().color(MUTED));
+            ui.separator();ui.label(RichText::new("认证由 CLI 自己管理。Ingenaro 不读取登录 Token、不改写全局 CLI 设置；模型目录检测不发送生成需求。").small().color(MUTED));
         });
         if !open {
             self.ai.settings_open = false;

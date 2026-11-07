@@ -765,7 +765,7 @@ impl Project {
             "项目文件超过 48 MB 限制"
         );
         let project: Self =
-            serde_json::from_slice(&bytes).context("项目格式无效，预期为 .rpshop JSON 文件")?;
+            serde_json::from_slice(&bytes).context("项目格式无效，预期为 .ingenaro 或旧版 .rpshop JSON 文件")?;
         project.validate()?;
         Ok(project)
     }

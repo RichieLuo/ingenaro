@@ -1,15 +1,15 @@
 //! Regenerate the independently authored built-in library gallery.
 //! cargo run --example library-showcase -- [output-directory]
 use anyhow::Result;
-use rpshop::model::{Page, Project, TextLayout, Widget, WidgetKind};
-use rpshop::widget_library::{Category, ITEMS};
+use ingenaro::model::{Page, Project, TextLayout, Widget, WidgetKind};
+use ingenaro::widget_library::{Category, ITEMS};
 
 fn main() -> Result<()> {
     let directory = std::env::args().nth(1).unwrap_or_else(|| "examples".into());
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory)?;
     let mut project = Project::blank();
-    project.name = "RPShop 组件画廊".into();
+    project.name = "Ingenaro 组件画廊".into();
     project.pages.clear();
     for category in Category::ALL {
         let items: Vec<_> = ITEMS
@@ -82,10 +82,10 @@ fn main() -> Result<()> {
         page.height = (y + 22.0).max(min_height);
         project.pages.push(page);
     }
-    project.save(&directory.join("library.rpshop"))?;
+    project.save(&directory.join("library.ingenaro"))?;
     std::fs::write(
         directory.join("library.html"),
-        rpshop::export::html(&project)?,
+        ingenaro::export::html(&project)?,
     )?;
     for (index, page) in project.pages.iter().enumerate() {
         let name = if index == 0 {
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
         } else {
             format!("library-{}.svg", index + 1)
         };
-        std::fs::write(directory.join(name), rpshop::export::svg(page)?)?;
+        std::fs::write(directory.join(name), ingenaro::export::svg(page)?)?;
     }
     println!(
         "已生成 {} 个分类、{} 项组件的画廊：{}",

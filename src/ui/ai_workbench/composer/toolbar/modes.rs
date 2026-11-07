@@ -71,7 +71,10 @@ impl App {
                 ] {
                     if mode_row(ui, value, description, mode == value).clicked() {
                         // Presentation must not bypass the existing full-access confirmation.
-                        if mode != value {
+                        if mode != value
+                            || (value == permissions::PermissionMode::Full
+                                && !self.ai_has_full_permission())
+                        {
                             self.ai_change_permission(value);
                         }
                         ui.close();

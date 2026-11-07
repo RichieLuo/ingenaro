@@ -191,7 +191,7 @@ fn require_page_scope(project: &Project, assigned: u64, operation: &Operation) -
         Operation::CreateWidget { page_id, id, .. } => {
             ensure!(
                 id.is_none(),
-                "Let RPShop allocate IDs in parallel page design"
+                "Let Ingenaro allocate IDs in parallel page design"
             );
             *page_id
         }
@@ -247,7 +247,7 @@ fn native_preflight(operation: &Operation) -> Result<()> {
         | Operation::DeletePageFolder { .. }
         | Operation::MovePageFolder { .. }
         | Operation::MovePage { .. } => {
-            bail!("原生 RP 文件暂不支持修改页面文件夹结构；请另存为 .rpshop 后操作")
+            bail!("原生 RP 文件暂不支持修改页面文件夹结构；请另存为 .ingenaro 后操作")
         }
         Operation::UpdatePage { properties, .. } => {
             super::fields(properties, &["name", "background"]).map_err(anyhow::Error::msg)?;
@@ -263,7 +263,7 @@ fn native_preflight(operation: &Operation) -> Result<()> {
                 .context("Widget properties must be an object")?;
             ensure!(
                 !fields.contains_key("horizontal_layout"),
-                "Responsive layout is supported in .rpshop projects"
+                "Responsive layout is supported in .ingenaro projects"
             );
             // Added presets use exactly the same layout/vector metadata as GUI
             // creation. Existing source support is decided by host.preview_scene,

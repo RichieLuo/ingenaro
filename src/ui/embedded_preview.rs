@@ -55,7 +55,7 @@ impl EmbeddedPreview {
                 self.error = None;
             }
             if self.view.is_none() && self.error.is_none() {
-                let wrapper = match rpshop::design::preview_document(html) {
+                let wrapper = match ingenaro::design::preview_document(html) {
                     Ok(wrapper) => wrapper,
                     Err(error) => {
                         self.error = Some(error.to_string());

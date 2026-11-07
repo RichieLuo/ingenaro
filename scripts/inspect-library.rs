@@ -1,6 +1,6 @@
 //! Read-only catalog inspection of locally supplied RP libraries.
 //! Compile against the workspace's rpshop and serde_json libraries.
-use rpshop::rp_format::{binary, container};
+use ingenaro::rp_format::{binary, container};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

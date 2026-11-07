@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::design::palette::{
+use ingenaro::design::palette::{
     ColorEdit, ColorRole, HexColor, ImageColors, MAX_SWATCHES, Palette, PaletteProposal, Swatch,
     extract_colors, review_edits,
 };
@@ -230,7 +230,7 @@ impl App {
             "基于描述与已有知识生成建议，sources 留空。"
         };
         let context = format!(
-            "只为 RPShop 项目草案提出配色修改。保持用户要求保留的颜色，范围以本次描述为准；只补强调色时不替换现有颜色，只调整背景时不修改其他用途。整体重新配色时保留锁定色；用户明确指定修改某个锁定色时返回该修改，由宿主单独确认解锁。新方案建议主色、背景、文字和强调色，适合界面且文字/背景对比度至少 4.5:1。已有方案仅在用户要求补充中性色或提高对比度时调整其他用途。\n{search}\n仅输出一个 JSON 对象。示例 {{\"edits\":[{{\"op\":\"add\",\"role\":\"accent\",\"hex\":\"#E54B35\"}},{{\"op\":\"update\",\"index\":2,\"hex\":\"#FFF7EA\"}},{{\"op\":\"remove\",\"index\":3}}],\"sources\":[],\"rationale\":\"一句话说明主题的视觉特征与颜色选择，不写来源或链接\"}}。角色 primary, secondary, accent, background, text, neutral。index 从 1 开始，始终引用原草案行，每行至多修改一次；更新项可分别提供 hex 或 role。\n原草案（最多 {MAX_SWATCHES} 色）：{}\n图片本地提取候选（仅在用户要求时使用）：{}",
+            "只为 Ingenaro 项目草案提出配色修改。保持用户要求保留的颜色，范围以本次描述为准；只补强调色时不替换现有颜色，只调整背景时不修改其他用途。整体重新配色时保留锁定色；用户明确指定修改某个锁定色时返回该修改，由宿主单独确认解锁。新方案建议主色、背景、文字和强调色，适合界面且文字/背景对比度至少 4.5:1。已有方案仅在用户要求补充中性色或提高对比度时调整其他用途。\n{search}\n仅输出一个 JSON 对象。示例 {{\"edits\":[{{\"op\":\"add\",\"role\":\"accent\",\"hex\":\"#E54B35\"}},{{\"op\":\"update\",\"index\":2,\"hex\":\"#FFF7EA\"}},{{\"op\":\"remove\",\"index\":3}}],\"sources\":[],\"rationale\":\"一句话说明主题的视觉特征与颜色选择，不写来源或链接\"}}。角色 primary, secondary, accent, background, text, neutral。index 从 1 开始，始终引用原草案行，每行至多修改一次；更新项可分别提供 hex 或 role。\n原草案（最多 {MAX_SWATCHES} 色）：{}\n图片本地提取候选（仅在用户要求时使用）：{}",
             serde_json::to_string(&base).unwrap_or_default(),
             serde_json::to_string(&image_colors.map(|colors| &colors.suggested))
                 .unwrap_or_default(),

@@ -1,11 +1,11 @@
 ---
 name: rpshop-automation
-description: Inspect or edit a live RPShop prototype with RPShop tools. Use for project files, pages and folders, widgets, styles, interactions, editor history, preview, or export.
+description: Inspect or edit a live Ingenaro prototype with Ingenaro tools. Use for project files, pages and folders, widgets, styles, interactions, editor history, preview, or export.
 ---
 
-# RPShop live editing
+# Ingenaro live editing
 
-In RPShop's AI Design menu, open **外部 API / MCP** and enable MCP for the current project. Use **复制 MCP 配置（含临时密钥）** to configure an external client. Keep the temporary bearer token in the client configuration. Built-in AI receives the tools directly.
+In Ingenaro's AI Design menu, open **外部 API / MCP** and enable MCP for the current project. Use **复制 MCP 配置（含临时密钥）** to configure an external client. Keep the temporary bearer token in the client configuration. Built-in AI receives the tools directly.
 
 1. Discover the available tools with MCP `tools/list` or the host's supplied definitions. Call `rpshop_capabilities` to check format, write limits and scope. Use the live tools for document work and the host dialogs for opening, saving and exporting files.
 2. Read the relevant live state with `rpshop_read_pages`, `rpshop_read_layers`, `rpshop_read_widgets`, `rpshop_read_styles`, or `rpshop_read_interactions`. Page and widget IDs are positive numbers. Folder IDs are strings. An empty `page_tree` means that all pages are at the root.
@@ -13,7 +13,7 @@ In RPShop's AI Design menu, open **外部 API / MCP** and enable MCP for the cur
 
 ## Organize the page directory
 
-Check `page_folders.editable` in capabilities. In `.rpshop`, create folders with `create_page_folder`. Provide a unique `folder_id` to reference a folder in the same batch, or use the returned ID in the next call. Set `parent_folder_id` for a subfolder. Use `move_page` for an existing page and `create_page` with `folder_id` for a new page inside a folder. Root destinations use null or omit the destination field. Use `rename_page_folder`, `move_page_folder`, and `delete_page_folder` to manage folders. Deletion promotes children to the parent level and preserves the pages. For native RP files, the folder tree is readable and can be edited after saving as `.rpshop`.
+Check `page_folders.editable` in capabilities. In `.ingenaro`, create folders with `create_page_folder`. Provide a unique `folder_id` to reference a folder in the same batch, or use the returned ID in the next call. Set `parent_folder_id` for a subfolder. Use `move_page` for an existing page and `create_page` with `folder_id` for a new page inside a folder. Root destinations use null or omit the destination field. Use `rename_page_folder`, `move_page_folder`, and `delete_page_folder` to manage folders. Deletion promotes children to the parent level and preserves the pages. For native RP files, the folder tree is readable and can be edited after saving as `.ingenaro`.
 
 This `rpshop_batch_edit` call groups page 1 with a new settings page. Confirm that page 1 exists before calling.
 

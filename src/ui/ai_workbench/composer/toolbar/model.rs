@@ -40,9 +40,10 @@ impl App {
                 ui.set_width(modes::WIDTH);
                 let selected = self.ai_model_picker(ui, id, model);
                 let current = selected.as_deref().unwrap_or(model);
-                if selected.as_ref().is_some_and(|value| value != model) {
+                let model_changed = selected.as_ref().is_some_and(|value| value != model);
+                if model_changed {
                     self.ai.model_override = selected.clone();
-                    self.ai.effort_override = None;
+                    self.ai.effort_override = ai::ReasoningPreference::Engine;
                     self.ai.binding = None;
                 }
                 let configured = self.ai_current_effort(id, current);
@@ -51,7 +52,13 @@ impl App {
                 ui.separator();
                 let next = effort::row(ui, configured, &supported);
                 if next != configured {
-                    self.ai_set_effort(next);
+                    self.ai.effort_override = next.map_or(
+                        ai::ReasoningPreference::Auto,
+                        ai::ReasoningPreference::Level,
+                    );
+                }
+                if model_changed || next != configured {
+                    self.ai_save_composer_preferences();
                 }
             });
     }
@@ -60,28 +67,14 @@ impl App {
         let supported = self.ai_supported_efforts(id, model);
         self.ai
             .effort_override
-            .or_else(|| {
+            .resolve(
                 self.ai
                     .settings
                     .engines
                     .iter()
                     .find(|engine| engine.id == id)
-                    .and_then(|engine| engine.reasoning_effort)
-            })
+                    .and_then(|engine| engine.reasoning_effort),
+            )
             .filter(|value| supported.iter().any(|name| name == value.as_str()))
-    }
-
-    fn ai_set_effort(&mut self, next: Option<ai::ReasoningEffort>) {
-        if next.is_none()
-            && let Some(engine) = self
-                .ai
-                .settings
-                .engines
-                .iter_mut()
-                .find(|engine| engine.id == self.ai.selected_engine)
-        {
-            engine.reasoning_effort = None;
-        }
-        self.ai.effort_override = next;
     }
 }

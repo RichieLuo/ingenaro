@@ -19,8 +19,6 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
         "stream-json",
         "--include-partial-messages",
         "--replay-user-messages",
-        "--thinking-display",
-        "summarized",
         "--permission-prompt-tool",
         "stdio",
         "--tools",
@@ -45,7 +43,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
         command.arg("--resume").arg(&resume.session_id);
     }
     // Only an ephemeral per-process config. Never write ~/.claude/settings.json.
-    if job.is_palette() {
+    if !job.design_tools() {
         command.arg("--no-session-persistence");
     }
     if job.native_subagents() {
@@ -54,12 +52,12 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             .arg(subagents::definitions(job).to_string());
         command.args(["--agent", "rpshop-coordinator"]);
     }
-    let mcp_config = if !job.is_palette() {
+    let mcp_config = if job.design_tools() {
         let mcp = job
             .request
             .mcp
             .as_ref()
-            .ok_or("Claude requires the RPShop MCP bridge")?;
+            .ok_or("Claude requires the Ingenaro MCP bridge")?;
         json!({"mcpServers":{"rpshop":{"type":"http","url":mcp.endpoint,"headers":{"Authorization":format!("Bearer {}",mcp.token)}}}})
     } else {
         json!({"mcpServers":{}})
@@ -167,14 +165,14 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 if request["subtype"] == "can_use_tool" {
                     let name = request["tool_name"].as_str().unwrap_or("").to_owned();
                     let arguments = request["input"].clone();
-                    let allowed = !job.is_palette()
+                    let allowed = job.design_tools()
                         && (is_rpshop_tool(&job.request.tools, &name)
                             || job.native_subagents()
                                 && subagents::allowed_call(&name, &arguments))
                         && job.permission(id.clone(), name, arguments.clone())?;
                     process.send(permission_response(&id, allowed, arguments))?;
                 } else {
-                    process.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"Unsupported RPShop control request"}}))?;
+                    process.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"Unsupported Ingenaro control request"}}))?;
                 }
             }
             "result" => {
@@ -199,7 +197,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
 }
 /// SDKUserMessage.message is an Anthropic MessageParam. Image blocks use
 /// Base64ImageSource, not a filename in prompt text. The CLI owns any native
-/// session persistence; RPShop never writes this payload into its project/logs.
+/// session persistence; Ingenaro never writes this payload into its project/logs.
 fn user_message(job: &Job) -> Value {
     let content = if job.request.images.is_empty() {
         json!(job.prompt())
@@ -218,7 +216,7 @@ fn user_message(job: &Job) -> Value {
     json!({"type":"user","message":{"role":"user","content":content},"parent_tool_use_id":null,"session_id":job.request.resume.as_ref().map(|r|r.session_id.as_str()).unwrap_or("")})
 }
 
-/// Claude Code exposes user-facing thinking summaries through the SDK stream.
+/// Forward thinking text as exposed by the Claude Code stream.
 /// Signatures, redacted blocks and subagent transcripts are deliberately ignored.
 #[derive(Default)]
 struct PublicOutput {
@@ -313,7 +311,10 @@ impl PublicOutput {
 }
 fn public_event(reasoning: bool, text: &str) -> AiEvent {
     if reasoning {
-        AiEvent::ReasoningDelta { text: text.into() }
+        AiEvent::ReasoningDelta {
+            text: text.into(),
+            summary: false,
+        }
     } else {
         AiEvent::TextDelta { text: text.into() }
     }
@@ -327,7 +328,7 @@ fn permission_response(id: &str, allowed: bool, arguments: Value) -> Value {
     let response = if allowed {
         json!({"behavior":"allow","updatedInput":arguments})
     } else {
-        json!({"behavior":"deny","message":"Denied by RPShop; only explicitly approved prototype tools are permitted"})
+        json!({"behavior":"deny","message":"Denied by Ingenaro; only explicitly approved prototype tools are permitted"})
     };
     json!({"type":"control_response","response":{"subtype":"success","request_id":id,"response":response}})
 }
@@ -353,9 +354,9 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(output.stream(&json!({"event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"Inspect "}}})),
-            [AiEvent::ReasoningDelta { text: "Inspect ".into() }]);
+            [AiEvent::ReasoningDelta { text: "Inspect ".into(), summary: false }]);
         assert_eq!(output.stream(&json!({"event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"pages"}}})),
-            [AiEvent::ReasoningDelta { text: "pages".into() }]);
+            [AiEvent::ReasoningDelta { text: "pages".into(), summary: false }]);
         assert_eq!(output.stream(&json!({"event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Done"}}})),
             [AiEvent::TextDelta { text: "Done".into() }]);
         let snapshot = json!({"message":{"id":"m1","content":[{"type":"thinking","thinking":"Inspect pages first","signature":"private signature"},{"type":"text","text":"Done."}]}});
@@ -363,7 +364,8 @@ mod tests {
             output.snapshot(&snapshot),
             [
                 AiEvent::ReasoningDelta {
-                    text: " first".into()
+                    text: " first".into(),
+                    summary: false,
                 },
                 AiEvent::TextDelta { text: ".".into() },
             ]
@@ -371,7 +373,7 @@ mod tests {
         assert!(output.snapshot(&snapshot).is_empty());
         output.stream(&json!({"event":{"type":"message_start","message":{"id":"m2"}}}));
         assert_eq!(output.snapshot(&json!({"message":{"id":"m2","content":[{"type":"thinking","thinking":"Inspect pages first"}]}})),
-            [AiEvent::ReasoningDelta { text: "Inspect pages first".into() }]);
+            [AiEvent::ReasoningDelta { text: "Inspect pages first".into(), summary: false }]);
     }
     #[test]
     fn signatures_redactions_and_sidechain_thinking_are_not_public_output() {

@@ -60,8 +60,8 @@ fn atomic_inbox_ignores_partial_invalid_and_oversized_requests() {
 #[test]
 fn deferred_document_keeps_its_request_and_emits_restore_and_focus() {
     let directory = Directory::new();
-    let first = directory.0.join("first.rpshop");
-    let second = directory.0.join("second.rpshop");
+    let first = directory.0.join("first.ingenaro");
+    let second = directory.0.join("second.ingenaro");
     let ctx = egui::Context::default();
     attach_paths_for_test(&ctx, vec![first.clone(), second.clone()]);
     let output = ctx.run(egui::RawInput::default(), |ctx| {

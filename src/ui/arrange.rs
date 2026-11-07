@@ -35,7 +35,7 @@ impl App {
 pub(super) fn arrange_widgets(
     page: &mut Page,
     selected: &BTreeSet<u64>,
-    native: Option<&rpshop::rp_format::NativeDocument>,
+    native: Option<&ingenaro::rp_format::NativeDocument>,
     mode: usize,
 ) {
     let editable_ids: BTreeSet<u64> = page
@@ -103,7 +103,7 @@ pub(super) fn arrange_widgets(
                 if !complete_groups.contains(unit) {
                     continue;
                 }
-                let next = rpshop::manipulation::rotated_bounds(widget);
+                let next = ingenaro::manipulation::rotated_bounds(widget);
                 let bounds = unit_bounds.entry(*unit).or_insert(next);
                 bounds[0] = bounds[0].min(next[0]);
                 bounds[1] = bounds[1].min(next[1]);
@@ -134,16 +134,16 @@ pub(super) fn arrange_widgets(
             let proxy_ids = unit_order.into_iter().collect::<BTreeSet<_>>();
             if mode < 6 {
                 let modes = [
-                    rpshop::manipulation::Align::Left,
-                    rpshop::manipulation::Align::Center,
-                    rpshop::manipulation::Align::Right,
-                    rpshop::manipulation::Align::Top,
-                    rpshop::manipulation::Align::Middle,
-                    rpshop::manipulation::Align::Bottom,
+                    ingenaro::manipulation::Align::Left,
+                    ingenaro::manipulation::Align::Center,
+                    ingenaro::manipulation::Align::Right,
+                    ingenaro::manipulation::Align::Top,
+                    ingenaro::manipulation::Align::Middle,
+                    ingenaro::manipulation::Align::Bottom,
                 ];
-                rpshop::manipulation::align(&mut proxies, &proxy_ids, modes[mode]);
+                ingenaro::manipulation::align(&mut proxies, &proxy_ids, modes[mode]);
             } else {
-                rpshop::manipulation::distribute(&mut proxies, &proxy_ids, mode == 6);
+                ingenaro::manipulation::distribute(&mut proxies, &proxy_ids, mode == 6);
             }
             for proxy in proxies {
                 let initial = initial_positions[&proxy.id];
@@ -177,12 +177,12 @@ pub(super) fn arrange_widgets(
                 }
             }
             let movement = match mode {
-                8 => rpshop::selection::LayerMove::ToFront,
-                9 => rpshop::selection::LayerMove::Forward,
-                10 => rpshop::selection::LayerMove::Backward,
-                _ => rpshop::selection::LayerMove::ToBack,
+                8 => ingenaro::selection::LayerMove::ToFront,
+                9 => ingenaro::selection::LayerMove::Forward,
+                10 => ingenaro::selection::LayerMove::Backward,
+                _ => ingenaro::selection::LayerMove::ToBack,
             };
-            if rpshop::grouping::reorder(&mut staged, selected, movement) {
+            if ingenaro::grouping::reorder(&mut staged, selected, movement) {
                 let locks = widgets
                     .iter()
                     .map(|widget| (widget.id, widget.locked))
@@ -206,7 +206,7 @@ pub(super) fn arrange_widgets(
                         f32::NEG_INFINITY,
                     ],
                     |mut bounds, widget| {
-                        let next = rpshop::manipulation::rotated_bounds(widget);
+                        let next = ingenaro::manipulation::rotated_bounds(widget);
                         bounds[0] = bounds[0].min(next[0]);
                         bounds[1] = bounds[1].min(next[1]);
                         bounds[2] = bounds[2].max(next[2]);
@@ -217,7 +217,7 @@ pub(super) fn arrange_widgets(
             let pivot = [(bounds[0] + bounds[2]) / 2.0, (bounds[1] + bounds[3]) / 2.0];
             for widget in widgets {
                 if editable_ids.contains(&widget.id) {
-                    *widget = rpshop::manipulation::rotate(
+                    *widget = ingenaro::manipulation::rotate(
                         widget,
                         if mode == 12 { -90.0 } else { 90.0 },
                         pivot,

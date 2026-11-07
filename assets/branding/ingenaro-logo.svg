@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Ingenaro spider</title>
+  <desc>A playful purple spider with a jaunty wave and a few mint web nodes.</desc>
+  <rect width="1024" height="1024" fill="#F0EAFD"/>
+  <g fill="none" stroke="#AD8DF0" stroke-linecap="round" opacity=".62">
+    <path d="M68 344Q222 286 304 178M87 632q117-28 202-122M246 948q86-104 172-138M764 138q91 120 188 166M790 492q112 25 181 105M701 923q64-108 172-136" stroke-width="12"/>
+    <path d="M304 178q147 102 287 16M178 344q124 77 211 83M289 510q87 46 117 160M764 138q-42 126-106 203M790 492q-92 61-130 137M701 923q-63-109-148-148" stroke-width="8"/>
+  </g>
+  <g fill="#A3F5BF">
+    <circle cx="68" cy="344" r="18"/><circle cx="304" cy="178" r="18"/><circle cx="87" cy="632" r="17"/>
+    <circle cx="246" cy="948" r="17"/><circle cx="764" cy="138" r="18"/><circle cx="956" cy="304" r="18"/>
+    <circle cx="971" cy="597" r="17"/><circle cx="873" cy="787" r="18"/><circle cx="701" cy="923" r="17"/>
+  </g>
+  <g fill="none" stroke="#5422CF" stroke-width="58" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M374 486Q288 411 202 428Q151 438 131 484"/>
+    <path d="M355 526Q249 477 168 518Q126 539 117 585"/>
+    <path d="M355 603Q253 600 195 664Q158 704 155 759"/>
+    <path d="M418 669Q361 742 358 820Q356 875 389 916"/>
+    <path d="M637 480Q718 410 789 411Q849 412 837 354Q829 317 861 288"/>
+    <path d="M669 525Q765 485 839 526Q882 550 901 592"/>
+    <path d="M672 607Q772 637 816 703Q844 745 836 789"/>
+    <path d="M590 672Q642 746 654 817Q661 868 635 910"/>
+  </g>
+  <g fill="none" stroke="#AD8DF0" stroke-width="17" stroke-linecap="round" opacity=".8">
+    <path d="M374 486Q288 411 202 428"/><path d="M355 526Q249 477 168 518"/>
+    <path d="M355 603Q253 600 195 664"/><path d="M418 669Q361 742 358 820"/>
+    <path d="M637 480Q718 410 789 411"/><path d="M669 525Q765 485 839 526"/>
+    <path d="M672 607Q772 637 816 703"/><path d="M590 672Q642 746 654 817"/>
+  </g>
+  <ellipse cx="388" cy="437" rx="156" ry="132" fill="#5422CF"/>
+  <path d="M284 401q65-72 146-40m-191 103q73-44 138-22" fill="none" stroke="#AD8DF0" stroke-width="30" stroke-linecap="round"/>
+  <ellipse cx="524" cy="571" rx="202" ry="190" fill="#6129E8" stroke="#5422CF" stroke-width="14"/>
+  <path d="M389 481q43-49 89-32m83-10q40-28 76 1" fill="none" stroke="#5422CF" stroke-width="18" stroke-linecap="round"/>
+  <ellipse cx="451" cy="554" rx="64" ry="79" fill="#F0EAFD" transform="rotate(-13 451 554)"/>
+  <ellipse cx="608" cy="526" rx="59" ry="73" fill="#F0EAFD" transform="rotate(9 608 526)"/>
+  <ellipse cx="468" cy="552" rx="27" ry="41" fill="#5422CF" transform="rotate(-13 468 552)"/>
+  <ellipse cx="622" cy="522" rx="25" ry="38" fill="#5422CF" transform="rotate(9 622 522)"/>
+  <circle cx="478" cy="535" r="11" fill="#fff"/><circle cx="630" cy="507" r="10" fill="#fff"/>
+  <ellipse cx="371" cy="630" rx="28" ry="16" fill="#A3F5BF" transform="rotate(-18 371 630)"/>
+  <ellipse cx="666" cy="600" rx="28" ry="16" fill="#A3F5BF" transform="rotate(17 666 600)"/>
+  <path d="M500 638q35 46 75 0q-3 60-43 62q-37-3-32-62" fill="#F0EAFD" stroke="#5422CF" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M861 288q20-45 61-50m-54 55q37-16 72-2" fill="none" stroke="#A3F5BF" stroke-width="18" stroke-linecap="round"/>
+</svg>

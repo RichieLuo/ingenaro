@@ -1,8 +1,8 @@
-# RPShop 开发约定
+# Ingenaro 开发约定
 
-RPShop 的工程和编辑器操作面向手动用户及 AI 调用者。新增功能时，先定义 AI 如何发现能力、定位对象、传入参数、确认成功和处理失败，再接入桌面界面。新增或改变的产品操作须在同一变更中交付可调用的工具和使用说明。
+Ingenaro 的工程和编辑器操作面向手动用户及 AI 调用者。新增功能时，先定义 AI 如何发现能力、定位对象、传入参数、确认成功和处理失败，再接入桌面界面。新增或改变的产品操作须在同一变更中交付可调用的工具和使用说明。
 
 - 在 `src/automation/schema.rs` 声明稳定的工具或批量操作，使用明确的参数、对象 ID、结果和限制。MCP 和内置 AI 使用同一份工具定义。
 - 让桌面和 AI 共用编辑逻辑。文档写入需要保留权限检查、原生格式校验、事务、撤销和预览刷新。涉及本地文件的操作使用宿主选择流程，凭据和系统剪贴板由宿主管理。
-- 同步更新 [RPShop 自动化技能](.agents/skills/rpshop-automation/SKILL.md)。工具定义变化时更新 `TOOL_PROTOCOL_REVISION`，让内置 AI 获取新定义。
+- 同步更新 [Ingenaro 自动化技能](.agents/skills/rpshop-automation/SKILL.md)。工具定义变化时更新 `TOOL_PROTOCOL_REVISION`，让内置 AI 获取新定义。
 - 通过实际工具入口验证新增或改变的操作。覆盖与改动相关的权限、格式、作用域和失败回滚。支持矩阵和限制以实时 `tools/list`、`rpshop_capabilities` 及工具返回为准。

@@ -2,7 +2,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke, vec2};
-use rpshop::model::{Project, Widget};
+use ingenaro::model::{Project, Widget};
 
 const DRAW_SECONDS: f64 = 0.52;
 const BATCH_SECONDS: f64 = 2.8;
@@ -10,6 +10,7 @@ const BATCH_SECONDS: f64 = 2.8;
 #[derive(Default)]
 pub(super) struct DesignReveal {
     entries: HashMap<(u64, u64), Entry>,
+    naro_texture: Option<egui::TextureHandle>,
 }
 
 struct Entry {
@@ -213,7 +214,8 @@ impl DesignReveal {
 
     /// A real local paint status, never a claimed model-generation percentage.
     pub(super) fn paint_status(
-        &self,
+        &mut self,
+        ctx: &egui::Context,
         painter: &egui::Painter,
         page_id: u64,
         time: f64,
@@ -248,13 +250,55 @@ impl DesignReveal {
                 painter.line_segment([corner, corner + vec2(0.0, dy * length)], stroke);
             }
             let y = mix(bounds.top(), bounds.bottom(), progress);
+            let thread_end = mix(bounds.left(), bounds.right(), progress);
             painter.line_segment(
-                [Pos2::new(bounds.left(), y), Pos2::new(bounds.right(), y)],
-                Stroke::new(1.0, super::PURPLE.gamma_multiply(0.22 * (1.0 - progress))),
+                [Pos2::new(bounds.left(), y), Pos2::new(thread_end, y)],
+                Stroke::new(1.5, super::PURPLE.gamma_multiply(0.28)),
             );
+            if progress > 0.12 {
+                for fraction in [0.25_f32, 0.5, 0.75] {
+                    if progress >= fraction {
+                        let strand_y = mix(bounds.top(), bounds.bottom(), fraction);
+                        painter.line_segment(
+                            [Pos2::new(bounds.left(), strand_y), Pos2::new(bounds.right(), strand_y)],
+                            Stroke::new(0.9, egui::Color32::from_rgba_unmultiplied(97, 41, 232, 34)),
+                        );
+                    }
+                }
+            }
+            let spider_size = 34.0;
+            let spider_min = Pos2::new(
+                (bounds.right() + 5.0).clamp(clip.left() + 3.0, clip.right() - spider_size - 3.0),
+                (bounds.top() - 20.0).clamp(clip.top() + 3.0, clip.bottom() - spider_size - 3.0),
+            );
+            let spider_rect = Rect::from_min_size(spider_min, vec2(spider_size, spider_size));
+            let spider_center = spider_rect.center();
+            let thread = Stroke::new(1.15, egui::Color32::from_rgba_unmultiplied(173, 141, 240, 150));
+            painter.line_segment([spider_center, bounds.left_top()], thread);
+            painter.line_segment([spider_center, bounds.right_top()], thread);
+            if self.naro_texture.is_none() {
+                let image = image::load_from_memory(include_bytes!("../../assets/branding/ingenaro-icon.png"))
+                    .expect("the embedded Naro spider artwork must be a valid image")
+                    .into_rgba8();
+                let size = [image.width() as usize, image.height() as usize];
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+                self.naro_texture = Some(ctx.load_texture(
+                    "ingenaro-naro-weaving",
+                    color_image,
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
+            if let Some(texture) = &self.naro_texture {
+                painter.image(
+                    texture.id(),
+                    spider_rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
         }
         let galley = painter.layout_no_wrap(
-            "正在绘制...".into(),
+            "Naro 正在编织…".into(),
             FontId::proportional(11.0),
             super::PURPLE,
         );

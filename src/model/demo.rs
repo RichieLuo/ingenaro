@@ -40,7 +40,7 @@ impl Default for Project {
                 31.0,
                 128.0,
                 34.0,
-                "rpshop",
+                "Ingenaro",
                 "#FFFFFF00",
                 "#243047",
                 25.0,

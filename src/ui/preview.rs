@@ -20,7 +20,7 @@ impl App {
 
     pub(super) fn native_source_snapshot(
         &mut self,
-    ) -> Option<std::sync::Arc<rpshop::rp_format::NativeDocument>> {
+    ) -> Option<std::sync::Arc<ingenaro::rp_format::NativeDocument>> {
         let Some(native) = &self.native else {
             self.cached_native_preview_source = None;
             return None;
@@ -38,7 +38,7 @@ impl App {
 
     pub(super) fn native_preview(
         &self,
-    ) -> anyhow::Result<Option<std::sync::Arc<rpshop::rp_format::NativePreview>>> {
+    ) -> anyhow::Result<Option<std::sync::Arc<ingenaro::rp_format::NativePreview>>> {
         self.native
             .as_ref()
             .map(|native| native.preview_scene(&self.project).map(std::sync::Arc::new))
@@ -59,7 +59,7 @@ impl App {
                 server.publish_with_native_document(self.project.clone(), keys, native)?;
             } else {
                 self.browser_preview =
-                    Some(rpshop::preview::PreviewServer::start_with_native_document(
+                    Some(ingenaro::preview::PreviewServer::start_with_native_document(
                         self.project.clone(),
                         keys,
                         native,

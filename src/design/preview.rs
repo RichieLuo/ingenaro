@@ -37,11 +37,11 @@ pub fn preview_document(source: &str) -> Result<String> {
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="{PARENT_POLICY}">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RPShop · 设计预览</title>
+<title>Ingenaro · 设计预览</title>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;background:#eeede8;color:#343b34;font:13px system-ui,sans-serif}}header{{min-height:58px;display:flex;align-items:center;gap:20px;padding:10px 22px;border-bottom:1px solid #d9dcd3;background:#fafbf7}}strong{{font-size:14px}}nav{{display:flex;gap:4px}}button{{font:inherit;color:inherit;cursor:pointer;border:1px solid transparent;border-radius:6px;background:none;padding:7px 12px}}button:hover{{background:#e5e9df}}button[aria-pressed="true"]{{background:#dae4d4;color:#24492f}}button:focus-visible{{outline:2px solid #386847;outline-offset:2px}}small{{margin-left:auto;color:#626d60}}main{{height:calc(100dvh - 59px);padding:16px;overflow:auto}}iframe{{display:block;width:100%;height:100%;min-height:360px;margin:auto;border:1px solid #dce0d5;border-radius:10px;background:#fff;box-shadow:0 10px 45px #293e3110}}iframe[data-size="tablet"]{{width:768px;max-width:100%}}iframe[data-size="mobile"]{{width:390px;max-width:100%}}@media(max-width:680px){{header{{padding:10px;gap:8px}}small{{display:none}}button{{padding:6px 8px}}main{{padding:8px}}}}@media(prefers-reduced-motion:reduce){{*{{scroll-behavior:auto!important}}}}
 </style></head><body>
-<header><strong>RPShop · 设计预览</strong><nav aria-label="预览尺寸"><button data-size="desktop" aria-pressed="true">桌面</button><button data-size="tablet" aria-pressed="false">平板</button><button data-size="mobile" aria-pressed="false">手机</button></nav><small>隔离预览 · 无外部资源</small></header>
+<header><strong>Ingenaro · 设计预览</strong><nav aria-label="预览尺寸"><button data-size="desktop" aria-pressed="true">桌面</button><button data-size="tablet" aria-pressed="false">平板</button><button data-size="mobile" aria-pressed="false">手机</button></nav><small>隔离预览 · 无外部资源</small></header>
 <main><iframe id="design" title="设计作品预览" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'; display-capture 'none'; usb 'none'" srcdoc="{srcdoc}"></iframe></main>
 <script>document.querySelectorAll('button[data-size]').forEach(button=>button.addEventListener('click',()=>{{document.getElementById('design').dataset.size=button.dataset.size;document.querySelectorAll('button[data-size]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)))}}));</script>
 </body></html>"##

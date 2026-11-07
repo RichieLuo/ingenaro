@@ -142,7 +142,7 @@ fn kind() -> Value {
 }
 fn canvas() -> Value {
     json!({"type":"string","enum":["Fixed","Auto","FixedWidth","FixedHeight","ResponsiveWidth"],
-        "description":"ResponsiveWidth is for .rpshop projects. Page width is the design reference; browser width follows the viewport, subject to responsive_min_width."})
+        "description":"ResponsiveWidth is for .ingenaro projects. Page width is the design reference; browser width follows the viewport, subject to responsive_min_width."})
 }
 fn nullable(value: Value) -> Value {
     json!({"anyOf":[value,{"type":"null"}]})
@@ -401,14 +401,14 @@ pub(super) fn definitions(set: ToolSet) -> Value {
     }
     let page_only = set == ToolSet::PageDesign;
     let addressing = if page_only {
-        "This worker can edit only its assigned page. Omitted page_id means that page. Let RPShop allocate new IDs; use the returned IDs in subsequent batches."
+        "This worker can edit only its assigned page. Omitted page_id means that page. Let Ingenaro allocate new IDs; use the returned IDs in subsequent batches."
     } else {
         "Explicit create IDs must be >= next_id; use them for references within a batch. Omitted page_id always means the page current at batch start."
     };
     let folders = if page_only {
         ""
     } else {
-        " For navigation folders in .rpshop, read rpshop_read_pages, then use create_page_folder, move_page, create_page with folder_id, or rename_page_folder, move_page_folder and delete_page_folder. Folder IDs are strings. Supply a unique folder_id at creation to refer to it in the same batch, or use the returned ID in a later batch. An omitted or null destination means root. Deleting a folder promotes its children and preserves the pages."
+        " For navigation folders in .ingenaro, read rpshop_read_pages, then use create_page_folder, move_page, create_page with folder_id, or rename_page_folder, move_page_folder and delete_page_folder. Folder IDs are strings. Supply a unique folder_id at creation to refer to it in the same batch, or use the returned ID in a later batch. An omitted or null destination means root. Deleting a folder promotes its children and preserves the pages."
     };
     list.push(tool("rpshop_batch_edit",&format!("Apply 1–512 operations as one atomic validated transaction. No edits survive a failed operation. Page and widget IDs are positive document IDs, not page indices. {addressing}{folders} Native page structure/dimensions and project renaming are unsupported; source-dependent edits require native host validation. Deleting pages or widgets prunes dangling interactions. Read rpshop_read_layers to find group and widget IDs. Group wraps complete outer groups and can set a name. Rename an existing group with rename_group and a widget with update_widget (properties.name). Unlock locked widgets explicitly before editing. create_library_item reuses any GUI library preset (read rpshop_read_library first): x/y set bounding-box origin, optional width/height independently scale member positions/sizes while preserving normalized vectors, groups, typography, padding and radius. Optional strict properties apply a shared style to all members; texts overrides a prefix in factory order. Returns real widget_ids/group_ids/bounds; template example IDs are not live IDs."),batch_schema(page_only),false,true));
     if set == ToolSet::Design {

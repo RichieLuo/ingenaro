@@ -15,7 +15,10 @@ fn model_suffix_is_visible_and_keeps_the_same_button_width() {
         Some(ai::ReasoningEffort::Xhigh),
         Some(ai::ReasoningEffort::Max),
     ] {
-        app.ai.effort_override = value;
+        app.ai.effort_override = value.map_or(
+            ai::ReasoningPreference::Auto,
+            ai::ReasoningPreference::Level,
+        );
         let output = toolbar_frame(&mut app, &context, 640.0);
         let suffix = text_center(&output, &format!("Opus 5.5({})", effort_short_label(value)));
         assert!(rect.contains(suffix));
@@ -84,18 +87,21 @@ fn selecting_a_new_model_updates_supported_efforts_without_closing_the_menu() {
             is_default: false,
             reasoning_efforts: vec!["low".into()],
         });
-    app.ai.effort_override = Some(ai::ReasoningEffort::High);
+    app.ai.effort_override = ai::ReasoningPreference::Level(ai::ReasoningEffort::High);
     let context = egui::Context::default();
     let output = open_modes(&mut app, &context, "model");
     click(&mut app, &context, text_center(&output, "Quick"));
     assert_eq!(app.ai.model_override.as_deref(), Some("quick"));
-    assert_eq!(app.ai.effort_override, None);
+    assert_eq!(app.ai.effort_override, ai::ReasoningPreference::Engine);
     assert!(egui::Popup::is_any_open(&context));
     let output = frame(&mut app, &context, vec![]);
     text_center(&output, "思考（自动）");
     let low = effort_bounds(&context, Some(ai::ReasoningEffort::Low)).center();
     click(&mut app, &context, low);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Low));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Low)
+    );
     app.ai.prompt = "test".into();
     let submission = app.ai_capture_submission().unwrap();
     assert_eq!(submission.engine.model, "quick");
@@ -137,7 +143,7 @@ fn permission_marks_match_the_menu_icon_for_every_mode() {
 #[test]
 fn selected_mode_and_effort_fill_use_theme_color_without_changing_text_selection() {
     let mut app = app();
-    app.ai.effort_override = Some(ai::ReasoningEffort::High);
+    app.ai.effort_override = ai::ReasoningPreference::Level(ai::ReasoningEffort::High);
     let context = egui::Context::default();
     crate::ui::setup_style(&context);
     open_modes(&mut app, &context, "permission");

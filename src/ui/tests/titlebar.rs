@@ -30,7 +30,7 @@ fn macos_titlebar_clears_native_controls_and_keeps_the_file_menu() {
         .shapes
         .iter()
         .find_map(|shape| match &shape.shape {
-            egui::Shape::Text(text) if text.galley.text() == "RPShop" => Some(text),
+            egui::Shape::Text(text) if text.galley.text() == "Ingenaro" => Some(text),
             _ => None,
         })
         .unwrap();
@@ -53,7 +53,7 @@ fn macos_brand_area_starts_a_native_window_drag() {
     let ctx = egui::Context::default();
     let mut app = app_with_logo(&ctx);
     let output = header_frame(&mut app, &ctx, vec![]);
-    let brand = text_center(&output, "RPShop");
+    let brand = text_center(&output, "Ingenaro");
     let output = header_frame(
         &mut app,
         &ctx,

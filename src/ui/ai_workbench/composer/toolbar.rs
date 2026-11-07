@@ -46,11 +46,17 @@ impl App {
             .to_owned();
         let model_name = self.ai_model_display(&id, &model);
         let mode = self.ai.authorization.mode();
+        let permission_label =
+            if mode == permissions::PermissionMode::Full && !self.ai_has_full_permission() {
+                "完全授权（待确认）"
+            } else {
+                mode.label()
+            };
         let effort = self.ai_current_effort(&id, &model);
         let effort_text = effort_label(effort);
         let labels = [
             engine_name.to_owned(),
-            mode.label().into(),
+            permission_label.into(),
             short_model(&model_name, 80),
         ];
         let mut measured = labels.each_ref().map(|label| {
@@ -96,7 +102,7 @@ impl App {
                     layout.widths[1],
                     Mark::Permission(mode),
                     layout.labels[1].then_some(labels[1].as_str()),
-                    &format!("权限模式：{}", mode.label()),
+                    &format!("权限模式：{permission_label}"),
                     ORANGE,
                     true,
                     layout.labels[1] || mode == permissions::PermissionMode::Full,
@@ -172,7 +178,7 @@ impl App {
         ui.set_min_width(210.0);
         ui.label(RichText::new("选择本地智能体").strong());
         ui.separator();
-        let previous = self.ai.selected_engine.clone();
+        let mut chosen = None;
         for engine in self
             .ai
             .settings
@@ -188,7 +194,7 @@ impl App {
             )
             .clicked()
             {
-                self.ai.selected_engine = engine.id.clone();
+                chosen = Some(engine.id.clone());
                 ui.close();
             }
         }
@@ -197,13 +203,8 @@ impl App {
             self.ai.settings_open = true;
             ui.close();
         }
-        if previous != self.ai.selected_engine {
-            self.ai.isolate();
-            self.ai_reveal.clear();
-            self.ai.model_override = None;
-            self.ai.model_query.clear();
-            let id = self.ai.selected_engine.clone();
-            self.ai_request_models(&id, false);
+        if let Some(id) = chosen {
+            self.ai_choose_local(id);
         }
     }
     fn ai_supported_efforts(&self, id: &str, model: &str) -> Vec<String> {

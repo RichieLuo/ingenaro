@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::model::{AuthoredEvent, EventTrigger, Interaction};
+use ingenaro::model::{AuthoredEvent, EventTrigger, Interaction};
 
 impl App {
     pub(super) fn interaction_editor(&mut self, ui: &mut egui::Ui, owner: Option<u64>) {

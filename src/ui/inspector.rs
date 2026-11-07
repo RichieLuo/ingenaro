@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::model::{CanvasMode, HorizontalLayout};
+use ingenaro::model::{CanvasMode, HorizontalLayout};
 
 impl App {
     pub(super) fn inspector_panel(&mut self, ctx: &egui::Context) {

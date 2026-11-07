@@ -114,7 +114,7 @@ fn opening_another_project_closes_the_previous_preview_session() {
         .unwrap()
         .to_owned();
     let path = std::env::temp_dir().join(format!(
-        "rpshop-preview-switch-{}-{}.rpshop",
+        "rpshop-preview-switch-{}-{}.ingenaro",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

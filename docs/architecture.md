@@ -1,6 +1,6 @@
 # Shop 项目约定
 
-SQLShop、LinkShop、RPShop 使用相同的桌面入口、目录职责和发布流程。每个仓库均可独立克隆、构建和打包，不依赖其他 Shop 仓库的位置。
+SQLShop、LinkShop、Ingenaro 使用相同的桌面入口、目录职责和发布流程。每个仓库均可独立克隆、构建和打包，不依赖其他 Shop 仓库的位置。
 
 ## 代码边界
 
@@ -24,7 +24,7 @@ docs/               功能范围、验证记录与维护说明
 
 `branding.rs` 可保留各平台所需的图标处理；SQLShop 的 macOS Dock 和 Windows 窗口行为仍由自己的平台适配实现。现有配置目录、文件格式和命令行参数保持兼容。
 
-三仓库的 `shell_open.rs` 保持一致。Windows GUI 在当前用户的登录会话中按产品保持单实例；再次启动将文件请求转发给现有 GUI，并请求恢复窗口和聚焦，不重复打开会写入同一配置的实例。SQL 文件只载入编辑器，SQLite 交给已有本地数据库入口；LinkShop 使用现有 Postman 导入流程；RPShop 沿用未保存文档确认。纯命令行操作独立运行，不进入 GUI 单实例转发。
+三仓库的 `shell_open.rs` 保持一致。Windows GUI 在当前用户的登录会话中按产品保持单实例；再次启动将文件请求转发给现有 GUI，并请求恢复窗口和聚焦，不重复打开会写入同一配置的实例。SQL 文件只载入编辑器，SQLite 交给已有本地数据库入口；LinkShop 使用现有 Postman 导入流程；Ingenaro 沿用未保存文档确认。纯命令行操作独立运行，不进入 GUI 单实例转发。
 
 ## 开发与检查
 
@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 check
 powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify
 ```
 
-任务语义一致：`check` 检查所有 target；`clippy` 执行 lint 并拒绝 warning；`test` 运行默认测试；`fmt` 检查格式；`verify` 依次执行 fmt、clippy、test。`build` 和 `release` 只编译，产物仍在 Cargo target 目录。`run` 后可传应用参数。RPShop 另保留原有 `demo`、`screenshot` 别名。
+任务语义一致：`check` 检查所有 target；`clippy` 执行 lint 并拒绝 warning；`test` 运行默认测试；`fmt` 检查格式；`verify` 依次执行 fmt、clippy、test。`build` 和 `release` 只编译，产物仍在 Cargo target 目录。`run` 后可传应用参数。Ingenaro 另保留原有 `demo`、`screenshot` 别名。
 
 Windows 脚本共用 `common.ps1`，优先选择完整的 VS 2022 C++ 工具链和 Windows SDK；其他系统或已配置的开发 shell 可直接使用 Cargo。三个项目均使用 Cargo 的注册表配置，不再由脚本强制指定镜像；旧 LinkShop 的 `-CratesIo` 参数继续接受。
 

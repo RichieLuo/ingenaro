@@ -56,12 +56,12 @@ impl App {
                                 if let Some(logo) = &self.logo {
                                     ui.add(
                                         egui::Image::new((logo.id(), vec2(28.0, 28.0)))
-                                            .alt_text("RPShop 猫头鹰 Logo"),
+                                            .alt_text("Ingenaro 蜘蛛 Logo"),
                                     );
                                 }
                                 ui.add_space(8.0);
                                 ui.label(
-                                    RichText::new("RPShop")
+                                    RichText::new("Ingenaro")
                                         .size(18.0)
                                         .strong()
                                         .color(Color32::from_rgb(30, 40, 48)),
@@ -79,7 +79,7 @@ impl App {
                             ui.image((logo.id(), vec2(38.0, 38.0)));
                         }
                         ui.vertical(|ui| {
-                            ui.label(RichText::new("rpshop").size(22.0).strong().color(INK));
+                            ui.label(RichText::new("Ingenaro").size(22.0).strong().color(INK));
                             ui.label(RichText::new("PROTOTYPE STUDIO").size(9.0).color(MUTED));
                         });
                     }
@@ -347,7 +347,7 @@ impl App {
                 if ui
                     .add_enabled(editable, egui::Button::new("新建文件夹").small())
                     .on_disabled_hover_text(
-                        "原生 RP 文件可保留和浏览目录。另存为 .rpshop 后可编辑目录。",
+                        "原生 RP 文件可保留和浏览目录。另存为 .ingenaro 后可编辑目录。",
                     )
                     .clicked()
                 {

@@ -25,7 +25,7 @@ pub fn title_texture(ctx: &eframe::egui::Context) -> eframe::egui::TextureHandle
         &icon.rgba,
     );
     ctx.load_texture(
-        "rpshop-title-icon",
+        "ingenaro-title-icon",
         image,
         eframe::egui::TextureOptions::LINEAR,
     )

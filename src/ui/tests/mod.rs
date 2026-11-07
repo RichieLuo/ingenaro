@@ -139,6 +139,18 @@ pub(super) fn click(app: &mut App, ctx: &egui::Context, pos: Pos2) -> egui::Full
     frame(app, ctx, vec![pointer(pos, false)])
 }
 
+pub(super) fn right_click(app: &mut App, ctx: &egui::Context, pos: Pos2) -> egui::FullOutput {
+    let button = |pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Secondary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    frame(app, ctx, vec![egui::Event::PointerMoved(pos), button(true)]);
+    frame(app, ctx, vec![button(false)]);
+    frame(app, ctx, vec![])
+}
+
 fn key(key: egui::Key, modifiers: egui::Modifiers) -> egui::Event {
     egui::Event::Key {
         key,

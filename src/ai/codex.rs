@@ -2,7 +2,7 @@ use super::process::{Process, cli_command};
 use super::runtime::Job;
 use super::{AiEvent, PublicText};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
@@ -57,10 +57,10 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
         );
     }
     let process = Process::spawn(&mut command, &job.request.working_dir)?;
-    process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"rpshop","title":"RPShop","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}}))?;
+    process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"rpshop","title":"Ingenaro","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}}))?;
     let mut thread = String::new();
     let mut text_blocks: HashMap<String, PublicText> = HashMap::new();
-    let mut summaries = PublicSummaries::default();
+    let mut reasoning = ReasoningStream::default();
     let mut turn_started = false;
     let mut server_overrides = serde_json::Map::new();
     let mut inventory_pages = 0;
@@ -118,7 +118,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             let mut params = thread_params(job);
             if job.native_subagents() {
                 let mcp = job.request.mcp.as_ref().unwrap();
-                // RPShop handles consent for its authenticated, turn-scoped tools.
+                // Ingenaro handles consent for its authenticated, turn-scoped tools.
                 server_overrides.insert(
                     format!("mcp_servers.{}", subagents::MCP_NAME),
                     json!({
@@ -137,7 +137,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 params["excludeTurns"] = json!(true);
                 "thread/resume"
             } else {
-                params["dynamicTools"] = if !job.is_palette() {
+                params["dynamicTools"] = if job.design_tools() {
                     dynamic_tools(job.request.tools.tool_definitions())
                 } else {
                     json!([])
@@ -155,7 +155,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 process.writer.clone(),
                 json!({"id":90,"method":"turn/interrupt","params":{"threadId":thread,"turnId":""}}),
             );
-            // Request the provider's public summary; never request raw reasoning.
+            // Keep summary-only providers visible when there is no reasoning text.
             let mut params = json!({"threadId":thread,"input":turn_input(job),"approvalPolicy":"untrusted","sandboxPolicy":{"type":"readOnly"},"summary":"auto"});
             if !job.request.config.model.is_empty() {
                 params["model"] = json!(job.request.config.model);
@@ -179,11 +179,31 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             agents.observe(job, &thread, method, params);
         }
         if params["threadId"].as_str() == Some(thread.as_str()) {
-            for text in summaries.receive(method, params) {
-                job.emit(AiEvent::ReasoningDelta { text });
+            for event in reasoning.receive(method, params) {
+                job.emit(event);
             }
         }
         match method {
+            "item/started" | "item/completed"
+                if !other_thread && params["item"]["type"] == "mcpToolCall" =>
+            {
+                let item = &params["item"];
+                if let (Some(id), Some(name)) = (item["id"].as_str(), item["tool"].as_str()) {
+                    job.emit(AiEvent::ToolCall {
+                        id: id.into(),
+                        name: name.into(),
+                        arguments: Value::Null,
+                    });
+                    if method == "item/completed" {
+                        job.emit(AiEvent::ToolResult {
+                            id: id.into(),
+                            result: Value::Null,
+                            is_error: item["status"] == "failed"
+                                || item["result"]["isError"] == true,
+                        });
+                    }
+                }
+            }
             "turn/started" if !other_thread => {
                 turn_started = true;
                 if let Some(turn) = params["turn"]["id"].as_str() {
@@ -264,10 +284,10 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 process.send(json!({"id":frame["id"],"result":dynamic_result(result,is_error)}))?;
             }
             "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-                // RPShop edits the open in-memory document, never the filesystem.
+                // Ingenaro edits the open in-memory document, never the filesystem.
                 process.send(json!({"id":frame["id"],"result":{"decision":"decline"}}))?;
                 job.emit(AiEvent::State {
-                    state: "Filesystem/command request denied; use RPShop tools".into(),
+                    state: "Filesystem/command request denied; use Ingenaro tools".into(),
                 });
             }
             "item/permissions/requestApproval" => {
@@ -295,7 +315,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             "" => {}
             _ => {
                 if frame.get("id").is_some() {
-                    process.send(json!({"id":frame["id"],"error":{"code":-32601,"message":"Unsupported RPShop client request"}}))?;
+                    process.send(json!({"id":frame["id"],"error":{"code":-32601,"message":"Unsupported Ingenaro client request"}}))?;
                 }
             }
         }
@@ -314,73 +334,132 @@ fn turn_input(job: &Job) -> Value {
     Value::Array(input)
 }
 
-/// Codex separates public summaries from raw `textDelta`/`content` reasoning.
-/// Only the public summary channel is eligible for UI display.
+/// Codex may provide text, a summary, or both for a reasoning item. Stream text
+/// immediately and keep a summary only if the completed item has no text.
 #[derive(Default)]
-struct PublicSummaries {
-    parts: HashMap<(String, u64), PublicText>,
+struct ReasoningStream {
+    items: HashMap<String, ReasoningItem>,
 }
-impl PublicSummaries {
-    fn receive(&mut self, method: &str, params: &Value) -> Vec<String> {
+
+#[derive(Default)]
+struct ReasoningItem {
+    parts: BTreeMap<u64, PublicText>,
+    summaries: BTreeMap<u64, PublicText>,
+    completed: bool,
+}
+
+impl ReasoningStream {
+    fn receive(&mut self, method: &str, params: &Value) -> Vec<AiEvent> {
         match method {
-            "item/reasoning/summaryTextDelta" => {
+            "item/reasoning/textDelta" | "item/reasoning/summaryTextDelta" => {
+                let summary = method == "item/reasoning/summaryTextDelta";
+                let index_key = if summary {
+                    "summaryIndex"
+                } else {
+                    "contentIndex"
+                };
                 let (Some(id), Some(index), Some(text)) = (
                     params["itemId"].as_str(),
-                    params["summaryIndex"]
-                        .as_u64()
-                        .filter(|index| *index < 1024),
+                    params[index_key].as_u64().filter(|index| *index < 1024),
                     params["delta"].as_str().filter(|text| !text.is_empty()),
                 ) else {
                     return vec![];
                 };
-                self.parts
-                    .entry((id.into(), index))
-                    .or_default()
-                    .record_delta(text);
-                vec![text.into()]
+                let item = self.items.entry(id.into()).or_default();
+                if item.completed {
+                    return vec![];
+                }
+                if summary {
+                    if item.parts.is_empty() {
+                        item.summaries.entry(index).or_default().record_delta(text);
+                    }
+                    vec![]
+                } else {
+                    item.summaries.clear();
+                    item.parts.entry(index).or_default().record_delta(text);
+                    vec![AiEvent::ReasoningDelta {
+                        text: text.into(),
+                        summary: false,
+                    }]
+                }
             }
             "item/completed" if params["item"]["type"] == "reasoning" => {
                 let item = &params["item"];
                 let Some(id) = item["id"].as_str() else {
                     return vec![];
                 };
-                let mut texts = Vec::new();
-                for (index, value) in item["summary"]
+                let state = self.items.entry(id.into()).or_default();
+                if std::mem::replace(&mut state.completed, true) {
+                    return vec![];
+                }
+                let mut deltas = Vec::new();
+                for (index, value) in item["content"]
                     .as_array()
                     .into_iter()
                     .flatten()
                     .take(1024)
                     .enumerate()
                 {
-                    if let Some(text) = value.as_str()
-                        && let Some(tail) = self
-                            .parts
-                            .entry((id.into(), index as u64))
-                            .or_default()
-                            .snapshot(text)
+                    if let Some(text) = value.as_str().filter(|text| !text.is_empty())
+                        && let Some(tail) =
+                            state.parts.entry(index as u64).or_default().snapshot(text)
                     {
-                        texts.push(tail.into());
+                        deltas.push(AiEvent::ReasoningDelta {
+                            text: tail.into(),
+                            summary: false,
+                        });
                     }
                 }
-                texts
+                if state.parts.is_empty() {
+                    for (index, value) in item["summary"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .take(1024)
+                        .enumerate()
+                    {
+                        if let Some(text) = value.as_str().filter(|text| !text.is_empty()) {
+                            // The final item may have only a snapshot for this part.
+                            let mut part = PublicText::default();
+                            part.record_delta(text);
+                            state.summaries.insert(index as u64, part);
+                        }
+                    }
+                    let text = std::mem::take(&mut state.summaries)
+                        .into_values()
+                        .filter_map(|part| part.prefix)
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    if !text.is_empty() {
+                        deltas.push(AiEvent::ReasoningDelta {
+                            text,
+                            summary: true,
+                        });
+                    }
+                }
+                state.parts.clear();
+                state.summaries.clear();
+                deltas
             }
-            // summaryPartAdded is a boundary, not text. It must not fabricate
-            // a status/summary; raw textDelta and item.content are never emitted.
             _ => vec![],
         }
     }
 }
 
 fn thread_params(job: &Job) -> Value {
-    let mut params = json!({"cwd":job.request.working_dir,"sandbox":"read-only","approvalPolicy":"untrusted","developerInstructions":"Use only the supplied RPShop tools. Never edit project files directly. RPShop requires explicit approval for document changes."});
-    if job.is_palette() {
+    let mut params = json!({"cwd":job.request.working_dir,"sandbox":"read-only","approvalPolicy":"untrusted","developerInstructions":"Use only the supplied Ingenaro tools. Never edit project files directly. Ingenaro requires explicit approval for document changes."});
+    if !job.design_tools() {
         params["ephemeral"] = json!(true);
-        params["developerInstructions"] = json!(
-            "Generate color suggestions only. Use web search for visual references when requested and available. Never edit files or designs. Return only the requested JSON."
-        );
+        params["developerInstructions"] = if job.is_palette() {
+            json!(
+                "Generate color suggestions only. Use web search for visual references when requested and available. Never edit files or designs. Return only the requested JSON."
+            )
+        } else {
+            json!(&job.request.context)
+        };
     } else if job.native_subagents() {
         params["developerInstructions"] = json!(
-            "Use RPShop tools for the live prototype. Put all independent page assignments in a single plan and spawn every assigned native subagent before calling wait. Do single-group and dependent work directly. Children use the rpshop_live MCP server and edit only assigned pages. Report their actual results in the parent conversation."
+            "Use Ingenaro tools for the live prototype. Put all independent page assignments in a single plan and spawn every assigned native subagent before calling wait. Do single-group and dependent work directly. Children use the rpshop_live MCP server and edit only assigned pages. Report their actual results in the parent conversation."
         );
     }
     if !job.request.config.model.is_empty() {
@@ -432,40 +511,38 @@ mod tests {
         }
     }
     #[test]
-    fn only_public_summaries_are_streamed_and_completed_snapshots_are_not_repeated() {
-        let mut summaries = PublicSummaries::default();
-        let delta = json!({"itemId":"r1", "summaryIndex":0, "delta":"Inspect "});
+    fn reasoning_stream_prefers_live_text_and_reconciles_snapshots() {
+        let mut reasoning = ReasoningStream::default();
+        let summary = json!({"itemId":"r1", "summaryIndex":0, "delta":"A summary."});
+        assert!(
+            reasoning
+                .receive("item/reasoning/summaryTextDelta", &summary)
+                .is_empty()
+        );
+        let delta = json!({"itemId":"r1", "contentIndex":0, "delta":"Inspect "});
         assert_eq!(
-            summaries.receive("item/reasoning/summaryTextDelta", &delta),
-            ["Inspect "]
+            reasoning.receive("item/reasoning/textDelta", &delta),
+            [AiEvent::ReasoningDelta {
+                text: "Inspect ".into(),
+                summary: false
+            }]
         );
-        assert!(
-            summaries
-                .receive("item/reasoning/textDelta", &delta)
-                .is_empty()
-        );
-        assert!(
-            summaries
-                .receive(
-                    "item/reasoning/summaryPartAdded",
-                    &json!({"itemId":"r1","summaryIndex":0})
-                )
-                .is_empty()
-        );
-        let item = json!({"item":{"type":"reasoning","id":"r1","summary":["Inspect pages","Plan update"],"content":["private reasoning"]}});
+        let item = json!({"item":{"type":"reasoning","id":"r1","summary":["A summary."],"content":["Inspect pages"]}});
         assert_eq!(
-            summaries.receive("item/completed", &item),
-            ["pages", "Plan update"]
+            reasoning.receive("item/completed", &item),
+            [AiEvent::ReasoningDelta {
+                text: "pages".into(),
+                summary: false
+            }]
         );
-        assert!(summaries.receive("item/completed", &item).is_empty());
-        assert_eq!(summaries.receive("item/completed", &json!({"item":{"type":"reasoning","id":"r2","summary":["Public fallback"],"content":["private reasoning"]}})), ["Public fallback"]);
-        assert!(
-            summaries
-                .receive(
-                    "item/completed",
-                    &json!({"item":{"type":"reasoning","id":"r3","content":["private reasoning"]}})
-                )
-                .is_empty()
+        assert!(reasoning.receive("item/completed", &item).is_empty());
+        let fallback = json!({"item":{"type":"reasoning","id":"r2","summary":["Summary-only provider."],"content":[]}});
+        assert_eq!(
+            reasoning.receive("item/completed", &fallback),
+            [AiEvent::ReasoningDelta {
+                text: "Summary-only provider.".into(),
+                summary: true
+            }]
         );
     }
     #[test]

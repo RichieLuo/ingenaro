@@ -1,6 +1,6 @@
-/* RPShop's independent native-scene interpreter. Source graphs are data only. */
+/* Ingenaro's independent native-scene interpreter. Source graphs are data only. */
 (()=>{'use strict';
-window.createRPShopPrototype=function(snapshot,host){
+window.createIngenaroPrototype=function(snapshot,host){
 const scene=snapshot.scene,program=snapshot.program;
 const pages=new Map(scene.pages.map(page=>[page.key,page])),events=new Map();
 for(const event of program.events){let map=events.get(event.owner);if(!map)events.set(event.owner,map=new Map());map.set(event.event_type,event.cases)}
@@ -55,4 +55,5 @@ function createContext(page,container,frame=null,ancestry=[page.key]){const ctx=
 function destroy(ctx){ctx.destroyed=true;for(const animation of ctx.animations)animation.cancel();for(const mask of ctx.masks)mask.remove();for(const frame of ctx.frames)if(frame.frameContext)destroy(frame.frameContext);ctx.body.remove()}
 return {has:key=>pages.has(key),show(key,container){if(main&&main.page.key===key&&main.container===container)return;if(main)destroy(main);main=null;dismissMenu();if(pages.has(key))main=createContext(pages.get(key),container)},reset(){if(main)destroy(main);main=null;dismissMenu()},diagnostics:program.diagnostics};
 };
+window.createRPShopPrototype=window.createIngenaroPrototype;
 })();

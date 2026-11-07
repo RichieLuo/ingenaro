@@ -1,6 +1,6 @@
 # 组件库与 RP 11 对照
 
-调查日期：2026-10-24。目标是本机 RP 11 安装副本。按原厂库的实际目录和组件类型核对 RPShop；所有新增预设、图标和渲染实现均由 RPShop 独立编写。
+调查日期：2026-10-24。目标是本机 RP 11 安装副本。按原厂库的实际目录和组件类型核对 Ingenaro；所有新增预设、图标和渲染实现均由 Ingenaro 独立编写。
 
 ## 证据与范围
 
@@ -8,7 +8,7 @@
 
 直接阅读该文件第 6–34 行可观察到 table、menuObject、repeater、dynamicPanel、textBox、textArea、listBox、comboBox、checkbox、radioButton、imageMapRegion、treeNodeObject、inlineFrame 等不同类型声明。这些是播放器的静态类型声明；没有执行参考桌面应用或验证其全部交互。声明本身也不等于默认库中有一项一一对应的预设。
 
-`.rplib` 清单另由 RPShop 的只读容器/对象图解析器读取，**不属于 REA 反编译结果**。检查脚本为 [inspect-library.rs](../scripts/inspect-library.rs)，读取 `DesignDocument` 的 `PackageInfo` 页面、sitemap 分类，以及对应对象包中的 `DiagramObject` 系列类型（此处省略命名空间前缀）。没有复制库中的图形、图片、样式或交互实现。完整目录在 [library-inventory.json](library-inventory.json)，图标库元数据在 [library-icons-inventory.json](library-icons-inventory.json)。
+`.rplib` 清单另由 Ingenaro 的只读容器/对象图解析器读取，**不属于 REA 反编译结果**。检查脚本为 [inspect-library.rs](../scripts/inspect-library.rs)，读取 `DesignDocument` 的 `PackageInfo` 页面、sitemap 分类，以及对应对象包中的 `DiagramObject` 系列类型（此处省略命名空间前缀）。没有复制库中的图形、图片、样式或交互实现。完整目录在 [library-inventory.json](library-inventory.json)，图标库元数据在 [library-icons-inventory.json](library-icons-inventory.json)。
 
 主程序集的既有观察仍有效：版本 `11.0.0.4137`，SHA-256 `1cc3801cb9ca79ef509b17be1deecc054419df8752bf0b52c808967e08ec9bd4`。REA managed members 检查受到 64 MiB 表示预算限制，不能给出完整桌面编辑器成员或行为；本轮没有把这个失败解释为组件不存在。
 
@@ -24,11 +24,11 @@
 
 ## Default 的 40 项逐项对照
 
-RPShop 的目录分为基本元件、表单与菜单、界面组合、标注、流程图、常用图标六组，支持中英文关键词搜索和分类筛选。当前目录包含 119 个可添加条目，复用 13 种底层 `WidgetKind`，提供样式预设、矢量造型和多组件组合。侧栏缩略图使用 RPShop 自绘线稿。
+Ingenaro 的目录分为基本元件、表单与菜单、界面组合、标注、流程图、常用图标六组，支持中英文关键词搜索和分类筛选。当前目录包含 119 个可添加条目，复用 13 种底层 `WidgetKind`，提供样式预设、矢量造型和多组件组合。侧栏缩略图使用 Ingenaro 自绘线稿。
 
 下表依据 `src/widget_library.rs` 的当前目录核对。标题、段落、便签等视觉预设复用基础类型；单选、文本域、下拉和列表使用各自的真实控件类型。组合预设可解组编辑，不具备原厂专用对象的数据模型。这里记录实现范围，运行与回归验证结果另见项目验证记录。
 
-| 分类 | 参考库项 | RPShop 对应与边界 |
+| 分类 | 参考库项 | Ingenaro 对应与边界 |
 | --- | --- | --- |
 | Common | Box 1 | 矩形；可编辑填充、边框、文字 |
 | Common | Box 2 | “矩形 2”样式预设，使用独立设计的填充和边框 |
@@ -77,7 +77,7 @@ RPShop 的目录分为基本元件、表单与菜单、界面组合、标注、�
 
 本轮提供其中除 Snapshot 之外各项的静态造型对应；图片、三角形等条目与基本元件组共用，不为每个原厂库名新增底层类型。各造型都是独立绘制的示意路径，尚未验证与原厂图形逐像素一致。
 
-| Flow 库项目 | RPShop 对应静态预设 |
+| Flow 库项目 | Ingenaro 对应静态预设 |
 | --- | --- |
 | Rectangle、Rounded rectangle、Ellipse、Hexagon、Triangle、Image | 基本元件中的矩形、圆角矩形、椭圆、六边形、三角形和图片；流程组另有流程、开始/结束、连接点、准备等常见用途入口 |
 | Diamond、Parallelogram、Document、Database | 判断、数据、文档、数据库 |
@@ -96,9 +96,9 @@ RPShop 的目录分为基本元件、表单与菜单、界面组合、标注、�
 
 新表单保留真实类型；HTML 中分别使用文本输入、`textarea`、复选/单选输入和 `select`，SVG 仅导出其静态外观。下拉/列表的 `text` 逐行表示选项，当前为单选列表；单选互斥组在页面内生效，显式空组各自独立。原生文件保留其 `radio-group` 名称。
 
-自有导出 HTML 在本机 Edge 无头浏览器中通过 13 项检查，覆盖多行输入、单选互斥与跨页隔离、下拉/列表选择、设置文本动作、文本转义及重叠矢量填充像素。记录见 [library-browser-qa.json](library-browser-qa.json)，复查脚本为 [verify-library.mjs](../scripts/verify-library.mjs)。这是 RPShop 自有播放器的运行验证，没有执行参考编辑器，也不证明全部原生保存和编辑行为已对齐。
+自有导出 HTML 在本机 Edge 无头浏览器中通过 13 项检查，覆盖多行输入、单选互斥与跨页隔离、下拉/列表选择、设置文本动作、文本转义及重叠矢量填充像素。记录见 [library-browser-qa.json](library-browser-qa.json)，复查脚本为 [verify-library.mjs](../scripts/verify-library.mjs)。这是 Ingenaro 自有播放器的运行验证，没有执行参考编辑器，也不证明全部原生保存和编辑行为已对齐。
 
-原生导入区分 `RadioButton`、`TextArea`、`ComboBox` 与 `ListBox`，没有再统一降级成复选框或单行输入。在 `.rp` 工程中新增这四类表单时，当前文件需已有同类原生对象供模板复制；无模板会拒绝保存。`.rplib` 仍不支持新增库条目，已有表单可编辑并保存。独立 `.rpshop` 工程无此模板限制。现有基础容器不能新增写回成动态面板。表格、菜单和树组合写回也不会变成原厂的专用复合对象。
+原生导入区分 `RadioButton`、`TextArea`、`ComboBox` 与 `ListBox`，没有再统一降级成复选框或单行输入。在 `.rp` 工程中新增这四类表单时，当前文件需已有同类原生对象供模板复制；无模板会拒绝保存。`.rplib` 仍不支持新增库条目，已有表单可编辑并保存。独立 `.ingenaro` 工程无此模板限制。现有基础容器不能新增写回成动态面板。表格、菜单和树组合写回也不会变成原厂的专用复合对象。
 
 内置常用图标共 28 项，使用可编辑的矢量路径。界面组合共 12 项，包括信息卡片、个人资料卡、统计卡片、登录表单、搜索栏、标签页、分页栏、面包屑、确认弹窗、提示横幅、空状态和进度条。组合保留内部文字、表单控件及图形的编辑能力，按钮动作可以在交互面板中配置。
 

@@ -40,23 +40,30 @@ impl App {
             .insert(id, models::CatalogState::qa(catalog, rx));
         if kind == "conversation" {
             self.ai.messages = vec![
-                ("你".into(), "把首页改成旅行规划工作台。保留侧边导航，重点突出精选路线和预约入口。".into()),
-                ("AI".into(), "## 首页调整已完成\n\n保留了原有导航结构，将首屏聚焦在**发现路线 → 查看详情 → 预约出行**。\n\n### 本轮修改\n\n- **精选路线**：统一卡片比例与留白，补齐行程和价格。\n- **预约入口**：主按钮使用品牌色，次要操作降低对比度。\n- **移动端**：卡片改为单列，保留清晰的阅读顺序。\n\n交互示例使用 `selectedRoute` 保存当前选择：\n\n```javascript\nconst selectRoute = (route) => {\n  selectedRoute = route.id;\n  openBookingPanel(route);\n};\n```\n\n> 所有画布修改都可以撤销；未覆盖已有工程文件。\n\n你可以继续选中路线卡片，让我调整内容或样式。".into()),
+                response::Message::new(
+                    design::ChatRole::User,
+                    "把首页改成旅行规划工作台。保留侧边导航，重点突出精选路线和预约入口。",
+                ),
+                response::Message::new(
+                    design::ChatRole::Assistant,
+                    "## 首页调整已完成\n\n保留了原有导航结构，将首屏聚焦在**发现路线 → 查看详情 → 预约出行**。\n\n### 本轮修改\n\n- **精选路线**：统一卡片比例与留白，补齐行程和价格。\n- **预约入口**：主按钮使用品牌色，次要操作降低对比度。\n- **移动端**：卡片改为单列，保留清晰的阅读顺序。\n\n交互示例使用 `selectedRoute` 保存当前选择：\n\n```javascript\nconst selectRoute = (route) => {\n  selectedRoute = route.id;\n  openBookingPanel(route);\n};\n```\n\n> 所有画布修改都可以撤销；未覆盖已有工程文件。\n\n你可以继续选中路线卡片，让我调整内容或样式。",
+                ),
             ];
-            self.ai.reasoning =
-                "先核对当前页面的导航与卡片分组，再分区域调整信息层级；保留未要求修改的元件。"
-                    .into();
-            self.ai.changes = vec![
-                "调用 · rpshop_read_pages".into(),
-                "工具执行完成".into(),
-                "调用 · rpshop_batch_edit".into(),
-                "工具执行完成".into(),
-            ];
+            let mut response = response::Response::default();
+            response.thinking_delta(
+                "先核对当前页面的导航与卡片分组，再分区域调整信息层级；保留未要求修改的元件。",
+                false,
+            );
+            response.tool_call("read".into(), "rpshop_read_pages".into());
+            response.tool_result("read", true);
+            response.tool_call("edit".into(), "rpshop_batch_edit".into());
+            response.tool_result("edit", true);
+            self.ai.messages[1].steps = response.steps;
             self.ai.state = "内置对话排版示例 · 不调用模型，不修改画布".into();
         }
         if kind == "conversation-tables" {
-            self.ai.messages = vec![(
-                "AI".into(),
+            self.ai.messages = vec![response::Message::new(
+                design::ChatRole::Assistant,
                 "建议优先补齐这些基础功能：\n\n\
                  | 模块 | 应包含的基础功能 |\n\
                  | --- | --- |\n\
@@ -67,8 +74,7 @@ impl App {
                  | --- | --- | --- | ---: | ---: | --- |\n\
                  | `SP-001` | 便携阅读灯 | 华东中心仓 | 128 | 30 | 11 月 6 日 |\n\
                  | `SP-002` | 多功能收纳盒 | 华南中心仓 | 26 | 40 | 11 月 6 日 |\n\n\
-                 库存低于预警阈值时，可在工作台显示补货提醒。"
-                    .into(),
+                 库存低于预警阈值时，可在工作台显示补货提醒。",
             )];
             self.ai.state = "内置表格排版示例 · 不调用模型，不修改画布".into();
         }

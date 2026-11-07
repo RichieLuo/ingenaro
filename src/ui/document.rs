@@ -59,13 +59,13 @@ impl App {
                     .and_then(|e| e.to_str())
                     .unwrap_or("rp")
             } else {
-                "rpshop"
+                "ingenaro"
             };
             if self.native.is_some() {
                 dialog = dialog.add_filter("RP 原生文件", &[extension]);
             }
             dialog
-                .add_filter("RPShop 工程", &["rpshop"])
+                .add_filter("Ingenaro 工程", &["ingenaro", "rpshop"])
                 .set_file_name(format!("{}.{}", self.project.name, extension))
                 .save_file()
         };
@@ -80,7 +80,7 @@ impl App {
                     .and_then(|e| e.to_str())
                     .unwrap_or("rp")
             } else {
-                "rpshop"
+                "ingenaro"
             };
             path.set_extension(extension);
         }
@@ -122,17 +122,17 @@ impl App {
                 .as_mut()
                 .ok_or_else(|| {
                     anyhow::anyhow!(
-                        "未加载对应的 RP 原生数据，无法写入此文件；请重新打开源文件或选择 .rpshop"
+                        "未加载对应的 RP 原生数据，无法写入此文件；请重新打开源文件或选择 .ingenaro"
                     )
                 })?
                 .save(&self.project, path)
         } else if path
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("rpshop") || e.eq_ignore_ascii_case("json"))
+            .is_some_and(|e| e.eq_ignore_ascii_case("ingenaro") || e.eq_ignore_ascii_case("rpshop") || e.eq_ignore_ascii_case("json"))
         {
             self.project.save(path)
         } else {
-            anyhow::bail!("请选择 .rp、.rplib 或 .rpshop 文件，不能将工程写入其他文件类型")
+            anyhow::bail!("请选择 .rp、.rplib、.ingenaro 或旧版 .rpshop 文件，不能将工程写入其他文件类型")
         }
     }
 
@@ -147,10 +147,10 @@ impl App {
     pub(super) fn replace(&mut self, action: &str) {
         let result = match action {
             "open" => rfd::FileDialog::new()
-                .add_filter("RP / RPShop 文件", &["rp", "rplib", "rpshop", "json"])
+                .add_filter("RP / Ingenaro 文件", &["rp", "rplib", "ingenaro", "rpshop", "json"])
                 .add_filter("RP 工程", &["rp"])
                 .add_filter("RP 组件库", &["rplib"])
-                .add_filter("RPShop 工程", &["rpshop", "json"])
+                .add_filter("Ingenaro 工程", &["ingenaro", "rpshop", "json"])
                 .pick_file()
                 .map(|p| load_document(&p)),
             "open-path" => self.pending_open.take().map(|p| load_document(&p)),
@@ -234,10 +234,10 @@ impl App {
             .save_file()
         {
             let result = if svg {
-                rpshop::export::svg(&self.project.pages[self.page])
+                ingenaro::export::svg(&self.project.pages[self.page])
             } else {
                 self.native_preview().and_then(|native| {
-                    rpshop::export::html_with_native(
+                    ingenaro::export::html_with_native(
                         &self.project,
                         &self.preview_page_keys(),
                         native.as_deref(),

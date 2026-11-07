@@ -13,7 +13,7 @@ impl Files {
         Self(root)
     }
     fn project(&self, name: &str) -> PathBuf {
-        let path = self.0.join(format!("{name}.rpshop"));
+        let path = self.0.join(format!("{name}.ingenaro"));
         let mut project = Project::blank();
         project.name = name.into();
         project.save(&path).unwrap();
@@ -80,7 +80,7 @@ fn shell_requests_preserve_dirty_project_and_queue_until_confirmation_is_resolve
 #[test]
 fn missing_shell_project_keeps_unsaved_input_without_creating_a_file() {
     let files = Files::new();
-    let missing = files.0.join("does-not-exist.rpshop");
+    let missing = files.0.join("does-not-exist.ingenaro");
     let ctx = egui::Context::default();
     let mut app = super::super::tests::fixture(Project::blank());
     app.screenshot_mode = false;

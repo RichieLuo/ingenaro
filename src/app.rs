@@ -14,7 +14,7 @@ pub fn run() -> eframe::Result {
     } else {
         let arguments = shell_arguments(&std::env::args_os().skip(1).collect::<Vec<_>>())
             .map_err(|error| eframe::Error::AppCreation(Box::new(error)))?;
-        match crate::shell_open::start("RPShop", &arguments)
+        match crate::shell_open::start("Ingenaro", &arguments)
             .map_err(|error| eframe::Error::AppCreation(Box::new(error)))?
         {
             Some(instance) => Some(instance),
@@ -26,9 +26,9 @@ pub fn run() -> eframe::Result {
         .map(crate::shell_open::Instance::attachment);
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title(if screenshot.is_some() {
-            "RPShop · 界面预览（隔离）"
+            "Ingenaro · 界面预览（隔离）"
         } else {
-            "RPShop · 原型工作室"
+            "Ingenaro · 原型工作室"
         })
         .with_decorations(!cfg!(target_os = "windows"))
         .with_inner_size([1500.0, 950.0])
@@ -51,7 +51,7 @@ pub fn run() -> eframe::Result {
         ..Default::default()
     };
     let result = eframe::run_native(
-        "RPShop",
+        "Ingenaro",
         options,
         Box::new(move |cc| {
             if let Some(attachment) = attachment {

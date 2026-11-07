@@ -42,7 +42,7 @@ fn embed_windows_icon() {
 
     winres::WindowsResource::new()
         .set_icon(path.to_str().expect("UTF-8 application icon path"))
-        .set("ProductName", "RPShop")
+        .set("ProductName", "Ingenaro")
         .set("FileDescription", env!("CARGO_PKG_DESCRIPTION"))
         .set("OriginalFilename", &format!("{name}.exe"))
         .compile()

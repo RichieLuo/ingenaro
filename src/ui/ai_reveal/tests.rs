@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::model::WidgetKind;
+use ingenaro::model::WidgetKind;
 
 fn document(count: usize) -> Project {
     let mut project = Project::blank();

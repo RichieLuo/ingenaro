@@ -1,6 +1,6 @@
 //! Import the editable content of native RP projects and widget libraries.
 //!
-//! The editor presents RPShop's smaller model. Native saving patches edited
+//! The editor presents Ingenaro's smaller model. Native saving patches edited
 //! fields and preserves untouched native objects and container parts.
 
 mod converter;
@@ -94,7 +94,7 @@ fn open_container(path: &Path, container: container::Container) -> Result<Native
     if !library {
         ensure!(
             order.len() <= 128,
-            "此原生项目有 {} 个页面，超过 RPShop 的 128 页上限；未截断或修改源文件",
+            "此原生项目有 {} 个页面，超过 Ingenaro 的 128 页上限；未截断或修改源文件",
             order.len()
         );
     }
@@ -175,7 +175,7 @@ fn open_container(path: &Path, container: container::Container) -> Result<Native
     }
     project
         .validate()
-        .context("原生导入结果超出 RPShop 文档限制，源文件保持不变")?;
+        .context("原生导入结果超出 Ingenaro 文档限制，源文件保持不变")?;
     let mut warnings = converter
         .warnings
         .into_iter()

@@ -62,7 +62,7 @@ impl CliFixture {
                 Instant::now() < deadline,
                 "{phase}: {} · {:?}",
                 self.app.ai.state,
-                self.app.ai.changes
+                self.app.ai.response.steps
             );
             frame(&mut self.app, ctx, vec![]);
             std::thread::park_timeout(Duration::from_millis(2));
@@ -176,7 +176,7 @@ fn check_parallel_design(kind: ai::EngineKind, prompt: &str, page_count: usize) 
         "one-main-session"
     );
     assert_eq!(test.app.ai.messages.len(), 2);
-    assert_eq!(test.app.ai.messages[1].1, "本轮完成");
+    assert_eq!(test.app.ai.messages[1].text, "本轮完成");
     assert_eq!(test.app.ai_activity_page_ids(), ids);
     assert!(test.app.ai_page_overview_visible());
     let output = frame(&mut test.app, &ctx, vec![]);
@@ -193,7 +193,7 @@ fn check_parallel_design(kind: ai::EngineKind, prompt: &str, page_count: usize) 
         test.app.ai.binding.as_ref().unwrap().session_id,
         "one-main-session"
     );
-    assert_eq!(test.app.ai.messages.last().unwrap().1, "仍在原会话");
+    assert_eq!(test.app.ai.messages.last().unwrap().text, "仍在原会话");
 }
 
 #[test]

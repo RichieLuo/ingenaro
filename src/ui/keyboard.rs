@@ -127,6 +127,21 @@ impl App {
                 .map(|w| w.id)
                 .collect();
         }
+        // Selectable labels handle Copy during painting, after editor shortcuts.
+        if self.ai.visible
+            && ctx
+                .plugin::<egui::text_selection::LabelSelectionState>()
+                .lock()
+                .has_selection()
+            && ctx.input(|input| {
+                input
+                    .events
+                    .iter()
+                    .any(|event| matches!(event, egui::Event::Copy))
+            })
+        {
+            return;
+        }
         // Native desktop backends emit clipboard events instead of Key(C/X/V).
         // Leave these events untouched while a text editor owns keyboard focus.
         let (copy, cut, paste) = ctx.input_mut(|input| {

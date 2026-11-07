@@ -218,7 +218,7 @@ pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> 
         available: success && compatible && logged_in,
         version,
         login_hint: if logged_in {
-            "CLI reports logged in; RPShop did not read any login credential"
+            "CLI reports logged in; Ingenaro did not read any login credential"
         } else {
             "CLI is not logged in or status could not be verified"
         }

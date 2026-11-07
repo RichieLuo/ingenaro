@@ -178,7 +178,7 @@ fn running_followup_waits_then_executes_with_its_own_image_and_frozen_reference(
         app.ai
             .messages
             .iter()
-            .filter(|(role, _)| role == "你")
+            .filter(|message| message.role == design::ChatRole::User)
             .count(),
         2
     );
@@ -252,8 +252,8 @@ fn history_and_new_conversation_clear_queued_drafts_and_old_generated_state() {
         app.ai
             .images
             .push(ai::ImageAttachment::from_rgba("草稿图", 1, 1, &[0; 4]).unwrap());
-        app.ai.reasoning = "旧摘要".into();
-        app.ai.streamed = "旧输出".into();
+        app.ai.response.thinking_delta("旧摘要", true);
+        app.ai.response.text = "旧输出".into();
         app.ai.html = "旧产物".into();
         app.ai_grant_full_permission();
         if history {
@@ -264,8 +264,8 @@ fn history_and_new_conversation_clear_queued_drafts_and_old_generated_state() {
         assert_ne!(app.ai.generation, generation);
         assert_eq!(app.ai.queue.len(), 0);
         assert!(app.ai.images.is_empty());
-        assert!(app.ai.reasoning.is_empty());
-        assert!(app.ai.streamed.is_empty());
+        assert!(app.ai.response.steps.is_empty());
+        assert!(app.ai.response.text.is_empty());
         assert!(app.ai.html.is_empty());
         assert!(!app.ai_has_full_permission());
         assert_eq!(app.ai.messages.len(), usize::from(history));

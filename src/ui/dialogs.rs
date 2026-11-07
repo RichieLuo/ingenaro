@@ -117,7 +117,7 @@ impl App {
         }
         if self.help {
             let mut close = false;
-            dialog_style::window(ctx, "关于 RPShop")
+            dialog_style::window(ctx, "关于 Ingenaro")
                 .id(egui::Id::new("rpshop-about"))
                 .default_width(590.0)
                 .resizable(false)
@@ -125,11 +125,11 @@ impl App {
                     close |= dialog_style::header(
                         ui,
                         dialog_style::Symbol::Info,
-                        "关于 RPShop",
+                        "关于 Ingenaro",
                         "把想法，变成可以点击的原型。",
                     );
                     dialog_style::section(ui, |ui| {
-                        ui.label(RichText::new("RPShop · 原型工作室").size(17.0).strong());
+                        ui.label(RichText::new("Ingenaro · 原型工作室").size(17.0).strong());
                         dialog_style::note(
                             ui,
                             "原型设计、AI 画布编辑、真实交互预览，以及 HTML / SVG 导出。",

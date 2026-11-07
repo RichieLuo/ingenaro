@@ -1,22 +1,7 @@
 //! A deliberate, in-memory grant bound to the built-in agent, document and chat generation.
 use super::*;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum PermissionMode {
-    #[default]
-    Ask,
-    Full,
-    ReadOnly,
-}
-impl PermissionMode {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Ask => "逐次确认",
-            Self::Full => "完全授权",
-            Self::ReadOnly => "只读讨论",
-        }
-    }
-}
+pub(super) use ai::PermissionMode;
 #[derive(Clone, PartialEq, Eq)]
 struct Grant {
     document: String,
@@ -28,6 +13,7 @@ pub(super) struct Authorization {
     mode: PermissionMode,
     grant: Option<Grant>,
     pub confirm_full: bool,
+    send_after_confirmation: bool,
 }
 impl Authorization {
     fn bound(ai: &Workbench) -> Grant {
@@ -41,15 +27,20 @@ impl Authorization {
         self.mode
     }
     pub fn reset(&mut self) {
-        self.mode = PermissionMode::Ask;
-        self.grant = None;
-        self.confirm_full = false;
+        self.remember_mode(PermissionMode::Ask);
     }
-    pub fn set_restricted(&mut self, mode: PermissionMode) {
-        debug_assert!(mode != PermissionMode::Full);
+    pub fn remember_mode(&mut self, mode: PermissionMode) {
         self.mode = mode;
         self.grant = None;
+        self.close_confirmation();
+    }
+    pub fn confirm_before_send(&mut self) {
+        self.confirm_full = true;
+        self.send_after_confirmation = true;
+    }
+    fn close_confirmation(&mut self) {
         self.confirm_full = false;
+        self.send_after_confirmation = false;
     }
     pub fn allow_for(&mut self, document: String, engine: String, generation: String) {
         self.mode = PermissionMode::Full;
@@ -58,7 +49,7 @@ impl Authorization {
             engine,
             generation,
         });
-        self.confirm_full = false;
+        self.close_confirmation();
     }
     pub fn allows(&self, ai: &Workbench) -> bool {
         self.mode == PermissionMode::Full && self.grant.as_ref() == Some(&Self::bound(ai))
@@ -80,6 +71,7 @@ impl App {
         self.ai.authorization.allows(&self.ai)
     }
     pub(super) fn ai_grant_full_permission(&mut self) {
+        let send = self.ai.authorization.send_after_confirmation;
         self.ai.authorization.allow_for(
             self.ai.document_id.clone(),
             self.ai.selected_engine.clone(),
@@ -88,14 +80,19 @@ impl App {
         self.ai.discuss_only = false;
         self.ai.state =
             "完全授权 · 仅当前工程和会话；画布修改不再逐次询问，可随时撤销或停止".into();
+        self.ai_save_composer_preferences();
+        if send {
+            self.ai_submit();
+        }
     }
     pub(super) fn ai_change_permission(&mut self, mode: PermissionMode) {
         if mode == PermissionMode::Full {
             self.ai.authorization.confirm_full = true;
             return;
         }
-        self.ai.authorization.set_restricted(mode);
+        self.ai.authorization.remember_mode(mode);
         self.ai.discuss_only = mode == PermissionMode::ReadOnly;
+        self.ai_save_composer_preferences();
     }
     pub(super) fn ai_builtin_request(&self, request: &automation::ToolRequest) -> bool {
         self.ai.running.is_some()
@@ -124,7 +121,7 @@ impl App {
             }
             return;
         }
-        // The CLI's registered RPShop MCP tools always route through the host gate below.
+        // The CLI's registered Ingenaro MCP tools always route through the host gate below.
         // One host decision replaces two duplicate dialogs; no shell/filesystem permission changes.
         let allowed = !self.ai_tool_arguments_private(&arguments);
         if let Some(running) = &self.ai.running {
@@ -145,7 +142,7 @@ impl App {
         self.ai.embedded.hide();
         let response=dialog_style::modal(ctx,"ai-full-session-grant").show(ctx,|ui| {
             ui.set_width((ctx.content_rect().width()-96.0).clamp(280.0,488.0));
-            if dialog_style::header(ui,dialog_style::Symbol::Shield,"完全授权当前 AI 会话？","让 AI 连续设计，不再逐次打断") {self.ai.authorization.confirm_full=false;}
+            if dialog_style::header(ui,dialog_style::Symbol::Shield,"完全授权当前 AI 会话？","让 AI 连续设计，不再逐次打断") {self.ai.authorization.close_confirmation();}
             dialog_style::section(ui,|ui| {
                 dialog_style::detail(ui,"允许连续操作当前设计","读取工程、增删元件、调整样式与交互、发布 HTML、恢复设计版本。");
                 ui.add_space(6.0);
@@ -155,12 +152,17 @@ impl App {
             dialog_style::note(ui,"授权仅限当前内置 Agent、工程与会话，切换后失效。外部 MCP 不继承，不开放任意终端或文件系统操作。");
             dialog_style::note(ui,"保存、导出和替换工程仍遵循文件选择与未保存保护。");
             dialog_style::actions(ui,|ui| {
-                if ui.add(dialog_style::primary("确认完全授权本会话",PURPLE)).clicked(){self.ai_grant_full_permission();}
-                if ui.add(dialog_style::secondary("取消")).clicked(){self.ai.authorization.confirm_full=false;}
+                let label = if self.ai.authorization.send_after_confirmation {
+                    "确认授权并发送"
+                } else {
+                    "确认完全授权本会话"
+                };
+                if ui.add(dialog_style::primary(label,PURPLE)).clicked(){self.ai_grant_full_permission();}
+                if ui.add(dialog_style::secondary("取消")).clicked(){self.ai.authorization.close_confirmation();}
             });
         });
         if response.should_close() {
-            self.ai.authorization.confirm_full = false;
+            self.ai.authorization.close_confirmation();
         }
     }
 }

@@ -153,7 +153,7 @@ pub(super) fn add_widget(
                 .map(|(id, _)| (g.clone(), id.clone()))
         })
         .with_context(|| if form_kind.is_some() {
-            format!("此文件缺少{}原生模板，暂不支持在该原生文件中新增此类型；可在 RPShop 工程中使用", widget.kind.label())
+            format!("此文件缺少{}原生模板，暂不支持在该原生文件中新增此类型；可在 Ingenaro 工程中使用", widget.kind.label())
         } else {
             "此文件没有可用于新增元件的原生形状模板".into()
         })?;

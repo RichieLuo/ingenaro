@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::model::EventTrigger;
+use ingenaro::model::EventTrigger;
 
 fn inspector_text(output: &egui::FullOutput, expected: &str) -> Pos2 {
     fn find(shape: &egui::epaint::Shape, expected: &str) -> Option<Pos2> {

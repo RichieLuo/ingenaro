@@ -16,7 +16,8 @@ pub use preview::{export_html, open_preview, preview_document, write_preview};
 pub use sample::{BUILTIN_SAMPLE_LABEL, builtin_sample, demo_html};
 pub use store::{MAX_STORE_BYTES, Store};
 pub use types::{
-    ArtifactContent, ArtifactKind, ChatRecord, ChatRole, Revision, RevisionOrigin, Scope, Session,
+    ArtifactContent, ArtifactKind, ChatActivity, ChatRecord, ChatRole, ChatStep, Revision,
+    RevisionOrigin, Scope, Session,
 };
 
 #[cfg(test)]

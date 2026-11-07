@@ -20,11 +20,11 @@ impl App {
                                 ui.add(
                                     egui::Image::new(logo)
                                         .fit_to_exact_size(vec2(28.0, 28.0))
-                                        .alt_text("RPShop Logo"),
+                                        .alt_text("Ingenaro Logo"),
                                 );
                             }
                             ui.add_space(8.0);
-                            ui.label(RichText::new("RPShop").strong().size(18.0));
+                            ui.label(RichText::new("Ingenaro").strong().size(18.0));
                         },
                     );
                     let brand_drag = ui.interact(
@@ -135,7 +135,7 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            assert_eq!(texts.iter().filter(|text| **text == "RPShop").count(), 1);
+            assert_eq!(texts.iter().filter(|text| **text == "Ingenaro").count(), 1);
             assert!(!texts.contains(&"rpshop"));
             assert!(!texts.contains(&"PROTOTYPE STUDIO"));
             for required in ["▶  预览原型", "导出 HTML", "● 未保存", "文件"] {
@@ -164,7 +164,7 @@ mod tests {
                 .shapes
                 .iter()
                 .find_map(|clipped| match &clipped.shape {
-                    egui::Shape::Text(shape) if shape.galley.text() == "RPShop" => Some(shape),
+                    egui::Shape::Text(shape) if shape.galley.text() == "Ingenaro" => Some(shape),
                     _ => None,
                 })
                 .unwrap();

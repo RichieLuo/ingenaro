@@ -2,7 +2,7 @@
 //! The zero-angle path uses the original native egui primitives.
 
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Stroke, StrokeKind, vec2};
-use rpshop::model::{Widget, WidgetKind};
+use ingenaro::model::{Widget, WidgetKind};
 
 const PURPLE: Color32 = Color32::from_rgb(117, 83, 222);
 
@@ -27,7 +27,7 @@ pub(super) fn draw_widget(
     let stroke = Stroke::new(zoom.max(0.7), fade(&widget.stroke));
     match widget.kind {
         WidgetKind::Rectangle if widget.vector_points.is_some() => {
-            for (points, closed) in rpshop::shape_geometry::contours(widget) {
+            for (points, closed) in ingenaro::shape_geometry::contours(widget) {
                 let positions: Vec<_> = points
                     .iter()
                     .map(|point| {
@@ -41,7 +41,7 @@ pub(super) fn draw_widget(
                     for pos in &positions {
                         mesh.colored_vertex(*pos, fill);
                     }
-                    for triangle in rpshop::shape_geometry::triangles(&points) {
+                    for triangle in ingenaro::shape_geometry::triangles(&points) {
                         mesh.add_triangle(
                             triangle[0] as u32,
                             triangle[1] as u32,
@@ -85,7 +85,7 @@ pub(super) fn draw_widget(
             }
         }
         WidgetKind::Line => {
-            let points = rpshop::vector_edit::line_endpoints(widget)
+            let points = ingenaro::vector_edit::line_endpoints(widget)
                 .map(|point| rotation.point(origin + vec2(point[0], point[1]) * zoom));
             painter.line_segment(
                 points,
@@ -446,7 +446,7 @@ mod tests {
         widget.height = 22.0;
         widget.font_size = 18.0;
         widget.text = "one complete source title on one row".into();
-        widget.text_layout = Some(rpshop::model::TextLayout {
+        widget.text_layout = Some(ingenaro::model::TextLayout {
             horizontal: 0,
             vertical: 0,
             padding: [0.0; 4],

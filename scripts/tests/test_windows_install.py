@@ -140,7 +140,8 @@ class WindowsInstallTests(unittest.TestCase):
 
     def test_registrations_leave_user_choice_and_extension_defaults_untouched(self):
         expected = {"sqlshop": {".sql", ".sqlite", ".sqlite3", ".db", ".db3"},
-                    "linkshop": {".json"}, "rpshop": {".rpshop", ".rp", ".rplib", ".json"}}
+                    "linkshop": {".json"}, "ingenaro": {".ingenaro", ".rpshop", ".rp", ".rplib", ".json"},
+                    "rpshop": {".rpshop", ".rp", ".rplib", ".json"}}
         for name, extensions in expected.items():
             with self.subTest(name=name):
                 metadata = installer.load_package(self.package(name, name=name))

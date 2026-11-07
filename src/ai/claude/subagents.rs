@@ -33,12 +33,12 @@ pub(super) fn definitions(job: &Job) -> Value {
     .into();
     json!({
         "rpshop-coordinator": {
-            "description":"Coordinates live page design in the current RPShop conversation.",
-            "prompt":"Design the open prototype using the RPShop tools. For independent pages, prepare one plan for the whole turn and call the rpshop-page Agent once per assignment in the same assistant message, with run_in_background set to true. Launch all groups before waiting and wait for every completion notification before replying. Do single-group and dependent work directly. Summarize the actual results in this conversation.",
+            "description":"Coordinates live page design in the current Ingenaro conversation.",
+            "prompt":"Design the open prototype using the Ingenaro tools. For independent pages, prepare one plan for the whole turn and call the rpshop-page Agent once per assignment in the same assistant message, with run_in_background set to true. Launch all groups before waiting and wait for every completion notification before replying. Do single-group and dependent work directly. Summarize the actual results in this conversation.",
             "model":"inherit", "tools":coordinator
         },
         PAGE_AGENT: {
-            "description":"Designs the native RPShop pages assigned by the coordinator.",
+            "description":"Designs the native Ingenaro pages assigned by the coordinator.",
             "prompt":"Work on the page IDs listed in your assignment. Read each page explicitly and edit it with rpshop_edit_assigned_page using its page_id. Apply complete batches of real editable widgets. Follow the shared design rules, leave other pages alone, and report what was applied.",
             "model":"inherit", "background":true, "tools":page_tools, "mcpServers":["rpshop"]
         }

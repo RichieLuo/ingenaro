@@ -27,9 +27,9 @@ use base64::Engine;
 use eframe::egui::{
     self, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, vec2,
 };
-use rpshop::manipulation::{self, Handle};
-use rpshop::model::{Action, Page, Project, Widget, WidgetKind};
-use rpshop::widget_library::{self, Category, LibraryItem};
+use ingenaro::manipulation::{self, Handle};
+use ingenaro::model::{Action, Page, Project, Widget, WidgetKind};
+use ingenaro::widget_library::{self, Category, LibraryItem};
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,
@@ -108,7 +108,7 @@ struct OpenedDocument {
     project: Project,
     save_path: Option<PathBuf>,
     warnings: Vec<String>,
-    native: Option<rpshop::rp_format::NativeDocument>,
+    native: Option<ingenaro::rp_format::NativeDocument>,
 }
 
 fn is_native_path(path: &std::path::Path) -> bool {
@@ -117,7 +117,7 @@ fn is_native_path(path: &std::path::Path) -> bool {
 }
 
 fn restore_native_context(
-    document: &mut rpshop::rp_format::NativeDocument,
+    document: &mut ingenaro::rp_format::NativeDocument,
     state: Option<&serde_json::Value>,
     draft: &mut Project,
     saved: &mut Project,
@@ -247,7 +247,7 @@ fn load_document(path: &std::path::Path) -> anyhow::Result<OpenedDocument> {
         .as_str()
     {
         "rp" | "rplib" => {
-            let result = rpshop::rp_format::open(path)?;
+            let result = ingenaro::rp_format::open(path)?;
             Ok(OpenedDocument {
                 project: result.project.clone(),
                 save_path: Some(path.to_path_buf()),
@@ -255,14 +255,14 @@ fn load_document(path: &std::path::Path) -> anyhow::Result<OpenedDocument> {
                 native: Some(result),
             })
         }
-        "rpshop" | "json" => Ok(OpenedDocument {
+        "ingenaro" | "rpshop" | "json" => Ok(OpenedDocument {
             project: Project::load(path)?,
             save_path: Some(path.to_path_buf()),
             warnings: Vec::new(),
             native: None,
         }),
         other => {
-            anyhow::bail!("暂不支持 .{other} 文件；请选择 .rp、.rplib 或 .rpshop 工程")
+            anyhow::bail!("暂不支持 .{other} 文件；请选择 .rp、.rplib 或 .ingenaro 工程")
         }
     }
 }
@@ -293,7 +293,7 @@ pub struct App {
     pending_widget: Option<library::LibraryDrag>,
     library_query: String,
     library_category: Option<Category>,
-    browser_preview: Option<rpshop::preview::PreviewServer>,
+    browser_preview: Option<ingenaro::preview::PreviewServer>,
     textures: HashMap<u64, egui::TextureHandle>,
     logo: Option<egui::TextureHandle>,
     status: String,
@@ -307,9 +307,9 @@ pub struct App {
     help: bool,
     import_warnings: Vec<String>,
     pending_open: Option<PathBuf>,
-    native: Option<rpshop::rp_format::NativeDocument>,
+    native: Option<ingenaro::rp_format::NativeDocument>,
     cached_native_preview_source:
-        Option<(usize, std::sync::Arc<rpshop::rp_format::NativeDocument>)>,
+        Option<(usize, std::sync::Arc<ingenaro::rp_format::NativeDocument>)>,
 }
 
 impl eframe::App for App {
@@ -453,11 +453,11 @@ impl eframe::App for App {
             self.confirm = Some("close".into());
         }
         if self.last_recovery.elapsed() > Duration::from_secs(5) && !self.screenshot_mode {
-            if let Some(dir) = directories::ProjectDirs::from("", "RPShop", "RPShop") {
+            if let Some(dir) = directories::ProjectDirs::from("", "Ingenaro", "Ingenaro") {
                 let _ = std::fs::create_dir_all(dir.data_local_dir());
                 let mut draft = self.project.clone();
                 normalize_draft(&mut draft);
-                if let Err(e) = draft.save(&dir.data_local_dir().join("recovery.rpshop")) {
+                if let Err(e) = draft.save(&dir.data_local_dir().join("recovery.ingenaro")) {
                     self.status = format!("恢复备份失败：{e:#}");
                 }
             }
@@ -783,7 +783,7 @@ fn apply_drag(
         return;
     }
     let grid = if snap { 8.0 } else { 0.0 };
-    let movement = rpshop::selection::constrained_delta(delta, shift);
+    let movement = ingenaro::selection::constrained_delta(delta, shift);
     let movement = movement.map(|v| if snap { (v / 8.0).round() * 8.0 } else { v });
     for w in &mut page.widgets {
         if !ids.contains(&w.id) || w.locked {

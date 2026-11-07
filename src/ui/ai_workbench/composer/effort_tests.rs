@@ -31,7 +31,10 @@ fn effort_picker_uses_live_supported_values_and_selection_updates_next_turn() {
     let _ = frame(&mut app, &context, vec![]);
     let highest = toolbar::effort_bounds(&context, Some(ai::ReasoningEffort::Max)).center();
     click(&mut app, &context, highest);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Max));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Max)
+    );
     assert!(app.project.pages[0].widgets.is_empty());
     assert!(app.undo.is_empty());
 }

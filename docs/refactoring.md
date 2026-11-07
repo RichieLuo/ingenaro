@@ -39,6 +39,6 @@
 - Windows 发布包实际构建完成，ZIP 完整性、包内程序 SHA-256、使用说明和第三方许可清单核对通过；PE 版本资源与项目名称/版本一致，依赖列表不包含动态 MSVC CRT。
 - 三仓库的通用打包脚本、资源环境脚本、文件规模检查、发布工作流、架构文档及格式配置保持一致。
 
-本次生成的候选包为 `dist/architecture-unification/RPShop-0.6.0-windows-x64.zip`，SHA-256 为 `5b030ebdb8dc8c9f4e83aebdf80636354dddfeb00ea395e9de12bde672aee108`。此目录是验证输出；常规打包仍默认使用 `dist/`，已有同名产物不会被覆盖。
+本次生成的候选包为 `dist/architecture-unification/Ingenaro-0.6.0-windows-x64.zip`，SHA-256 为 `5b030ebdb8dc8c9f4e83aebdf80636354dddfeb00ea395e9de12bde672aee108`。此目录是验证输出；常规打包仍默认使用 `dist/`，已有同名产物不会被覆盖。
 
 本轮未执行 GitHub Actions、macOS/Linux 构建或目标系统启动验证。跨平台 CI 和发布配置已统一，不能将本机 Windows 验证视为三系统实测。

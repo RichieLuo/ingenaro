@@ -1,5 +1,5 @@
 [package]
-name = "rpshop"
+name = "ingenaro"
 version = "1.0.0"
 edition = "2024"
 rust-version = "1.89"
@@ -7,7 +7,7 @@ description = "A Rust desktop prototyping studio"
 license = "MIT"
 
 [package.metadata.shop]
-product-name = "RPShop"
+product-name = "Ingenaro"
 
 [dependencies]
 anyhow = "1"

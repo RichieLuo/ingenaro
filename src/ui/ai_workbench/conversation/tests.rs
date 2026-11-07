@@ -1,12 +1,14 @@
 use super::*;
-use crate::ui::tests::{click, fixture, frame, text_center};
+use crate::ui::tests::{click, fixture, frame, right_click, text_center};
 
 #[test]
 fn assistant_renders_markdown_and_copy_preserves_raw_source() {
     let mut app = fixture(Project::blank());
     app.ai.visible = true;
     let raw = "## 已完成\n\n**重点** 与 `selectedRoute`。\n\n- 保留导航\n- 更新卡片\n\n| 页面 | 状态 |\n| --- | --- |\n| 首页 | 已更新 |\n\n```rust\nlet ready = true;\n```";
-    app.ai.messages.push(("AI".into(), raw.into()));
+    app.ai
+        .messages
+        .push(response::Message::new(ChatRole::Assistant, raw));
     let original = app.project.clone();
     let ctx = egui::Context::default();
     frame(&mut app, &ctx, vec![]);
@@ -25,9 +27,42 @@ fn assistant_renders_markdown_and_copy_preserves_raw_source() {
             .iter()
             .any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == raw))
     );
-    assert_eq!(app.ai.messages[0].1, raw);
+    assert_eq!(app.ai.messages[0].text, raw);
     assert_eq!(app.project, original);
     assert!(app.undo.is_empty());
+}
+
+#[test]
+fn assistant_context_menu_copies_rendered_selection_or_original_message() {
+    let mut app = fixture(Project::blank());
+    app.ai.visible = true;
+    let source = "**alpha** beta";
+    app.ai
+        .messages
+        .push(response::Message::new(ChatRole::Assistant, source));
+    let ctx = egui::Context::default();
+    frame(&mut app, &ctx, vec![]);
+    let output = frame(&mut app, &ctx, vec![]);
+    let alpha = text_center(&output, "alpha");
+    click(&mut app, &ctx, alpha);
+    click(&mut app, &ctx, alpha);
+
+    let menu = right_click(&mut app, &ctx, alpha);
+    click(&mut app, &ctx, text_center(&menu, "复制选中文字"));
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(
+        output.platform_output.commands.iter().any(
+            |command| matches!(command, egui::OutputCommand::CopyText(text) if text == "alpha")
+        )
+    );
+
+    let menu = right_click(&mut app, &ctx, alpha);
+    let output = click(&mut app, &ctx, text_center(&menu, "复制整条消息"));
+    assert!(
+        output.platform_output.commands.iter().any(
+            |command| matches!(command, egui::OutputCommand::CopyText(text) if text == source)
+        )
+    );
 }
 
 fn draw_markdown(
@@ -225,7 +260,7 @@ fn growing_streaming_markdown_and_unclosed_fence_leave_editor_state_intact() {
         "## 设计\n\n**正在绘制**\n\n```json\n{\"page\":",
         "## 设计\n\n**正在绘制**\n\n```json\n{\"page\":1}\n```",
     ] {
-        app.ai.streamed = text.into();
+        app.ai.response.text = text.into();
         frame(&mut app, &ctx, vec![]);
     }
     assert_eq!(app.project, original);

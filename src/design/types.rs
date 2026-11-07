@@ -86,6 +86,22 @@ pub struct ChatRecord {
     pub role: ChatRole,
     pub text: String,
     pub created_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<ChatStep>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatStep {
+    pub after_text: usize,
+    #[serde(flatten)]
+    pub activity: ChatActivity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "activity", rename_all = "snake_case")]
+pub enum ChatActivity {
+    Thinking { text: String, summary: bool },
+    Tool { name: String, outcome: Option<bool> },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +138,8 @@ pub struct Session {
     pub kind: ArtifactKind,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer_preferences: Option<crate::ai::ComposerPreferences>,
     pub messages: Vec<ChatRecord>,
     pub revisions: Vec<Revision>,
 }

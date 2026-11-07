@@ -1,5 +1,5 @@
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, vec2};
-use rpshop::{
+use ingenaro::{
     automation,
     model::{PageTreeNode, Project},
 };

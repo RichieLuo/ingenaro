@@ -11,7 +11,7 @@
 | macOS Apple Silicon | `macos-15` | `aarch64-apple-darwin` | `<Product>-<version>-macos-arm64.tar.gz` |
 | Linux x64 | `ubuntu-24.04` | `x86_64-unknown-linux-gnu` | `<Product>-<version>-linux-x64.tar.gz` |
 
-`<Product>` 为 SQLShop、LinkShop 或 RPShop，版本来自各自的 `Cargo.toml`。每个程序包均附带 `.sha256` 校验文件，包内保留使用说明、版本信息和第三方许可。macOS 和 Linux 当前提供便携二进制包，Windows 提供便携包和可选的当前用户安装脚本。
+`<Product>` 为 SQLShop、LinkShop 或 Ingenaro，版本来自各自的 `Cargo.toml`。每个程序包均附带 `.sha256` 校验文件，包内保留使用说明、版本信息和第三方许可。macOS 和 Linux 当前提供便携二进制包，Windows 提供便携包和可选的当前用户安装脚本。
 
 ## 触发构建
 

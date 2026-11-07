@@ -47,8 +47,8 @@ fn ruler_workspace(output: &egui::FullOutput) -> Rect {
     )
 }
 
-fn canvas_modes() -> [rpshop::model::CanvasMode; 4] {
-    use rpshop::model::CanvasMode;
+fn canvas_modes() -> [ingenaro::model::CanvasMode; 4] {
+    use ingenaro::model::CanvasMode;
     [
         CanvasMode::Fixed,
         CanvasMode::Auto,
@@ -403,12 +403,12 @@ fn moved_and_zoomed_canvas_still_hits_and_drags_in_document_coordinates() {
 #[test]
 fn auto_canvas_opens_at_full_scale_and_can_reach_negative_and_far_content() {
     let mut project = Project::blank();
-    project.pages[0].canvas = rpshop::model::CanvasMode::Auto;
+    project.pages[0].canvas = ingenaro::model::CanvasMode::Auto;
     project.pages[0].width = 64.0;
     project.pages[0].height = 64.0;
     let id = add(&mut project, WidgetKind::Text, 1600.0, -50.0);
     project.pages[0].widgets[0].text = "outside the original bounds".into();
-    project.pages[0].widgets[0].text_layout = Some(rpshop::model::TextLayout {
+    project.pages[0].widgets[0].text_layout = Some(ingenaro::model::TextLayout {
         horizontal: 0,
         vertical: 0,
         padding: [0.0; 4],
@@ -711,14 +711,14 @@ fn caller_selected_native_auto_title_opens_without_cropping_or_source_changes() 
     };
     let path = PathBuf::from(path);
     let original = std::fs::read(&path).unwrap();
-    let native = rpshop::rp_format::open(&path).unwrap();
+    let native = ingenaro::rp_format::open(&path).unwrap();
     let (page_index, widget_id) = native
         .project
         .pages
         .iter()
         .enumerate()
         .find_map(|(index, page)| {
-            if page.canvas != rpshop::model::CanvasMode::Auto {
+            if page.canvas != ingenaro::model::CanvasMode::Auto {
                 return None;
             }
             page.widgets

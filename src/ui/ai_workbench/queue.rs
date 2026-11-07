@@ -107,9 +107,7 @@ impl App {
         if let Some(model) = &self.ai.model_override {
             engine.model = model.clone();
         }
-        if let Some(effort) = self.ai.effort_override {
-            engine.reasoning_effort = Some(effort);
-        }
+        engine.reasoning_effort = self.ai.effort_override.resolve(engine.reasoning_effort);
         if let Some(state) = self.ai.catalogs.get(&engine.id) {
             let model = state
                 .catalog
@@ -208,6 +206,12 @@ impl App {
                 return;
             }
         };
+        if self.ai.authorization.mode() == ai::PermissionMode::Full
+            && !self.ai_has_full_permission()
+        {
+            self.ai.authorization.confirm_before_send();
+            return;
+        }
         if self.ai.queue.len() == 0 && self.ai.running.is_none() {
             self.ai.queue.paused = false;
         }

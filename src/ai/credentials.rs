@@ -8,7 +8,7 @@ impl CredentialStore {
         if engine_id.is_empty() || engine_id.len() > 128 {
             return Err("Invalid credential identity".into());
         }
-        keyring::Entry::new("RPShop.AI", engine_id)
+        keyring::Entry::new("Ingenaro.AI", engine_id)
             .map_err(|_| "OS credential store is unavailable".into())
     }
     pub fn get(engine_id: &str) -> Result<Option<String>, String> {

@@ -13,8 +13,8 @@ const PLATE_SIZE: u32 = if cfg!(target_os = "windows") {
 const MIN_ALPHA: u8 = 8;
 
 pub fn icon_image() -> image::RgbaImage {
-    let source = image::load_from_memory(include_bytes!("../assets/branding/rpshop-logo.png"))
-        .expect("the embedded RPShop application artwork must be a valid PNG")
+    let source = image::load_from_memory(include_bytes!("../assets/branding/ingenaro-logo.png"))
+        .expect("the embedded Ingenaro application artwork must be a valid PNG")
         .into_rgba8();
     let (left, top, width, height) = visible_bounds(&source);
     let artwork = image::imageops::crop_imm(&source, left, top, width, height).to_image();

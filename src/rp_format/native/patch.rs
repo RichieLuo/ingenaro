@@ -27,7 +27,7 @@ impl NativeDocument {
                         widget.horizontal_layout == crate::model::HorizontalLayout::LEFT
                     })
             }),
-            "响应式布局设置仅支持 .rpshop 工程"
+            "响应式布局设置仅支持 .ingenaro 工程"
         );
         let owners = owners(parts);
         let previous = self

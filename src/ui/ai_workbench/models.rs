@@ -204,6 +204,7 @@ impl App {
                     })
                     .map(|engine| engine.id.clone())
                     .unwrap_or_default();
+                self.ai.restore_composer_preferences(None);
             }
             if self.ai.persist && self.ai.config_load_error.is_none() {
                 if self
@@ -345,10 +346,10 @@ impl App {
         if self.ai.selected_engine != id {
             self.ai.isolate();
             self.ai_reveal.clear();
-            self.ai.model_override = None;
             self.ai.model_query.clear();
+            self.ai.selected_engine = id.clone();
+            self.ai.restore_composer_preferences(None);
         }
-        self.ai.selected_engine = id.clone();
         self.ai_request_models(&id, false);
     }
 }

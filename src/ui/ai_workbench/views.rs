@@ -21,6 +21,10 @@ impl App {
         }
         let panel_response = panel.show(ctx, |ui| {
             ui.spacing_mut().item_spacing = vec2(6.0, 8.0);
+            if self.ai.history_open {
+                self.ai_history_panel(ui);
+                return;
+            }
             ui.horizontal(|ui| {
                 ui.label(RichText::new("AI 设计").size(15.0).strong());
                 ui.label(
@@ -43,6 +47,12 @@ impl App {
                             self.ai.mcp_open = true;
                             ui.close();
                         }
+                        self.ai_versions_menu(ui);
+                        if ui.button("绑定此引擎到当前工程").clicked() {
+                            self.ai_bind_project_engine();
+                            ui.close();
+                        }
+                        ui.separator();
                         if ui.button("播放画布绘制示范").clicked() {
                             self.ai_play_drawing_demo(ctx);
                             ui.close();
@@ -76,9 +86,9 @@ impl App {
                         self.ai.visible = false;
                         self.sidebar_layout.inspector_open = false;
                     }
-                    if icon_button(ui, Icon::History, "历史会话与设计版本", true, MUTED).clicked()
-                    {
+                    if ui.small_button("历史").on_hover_text("历史会话").clicked() {
                         self.ai.history_open = true;
+                        ctx.request_repaint();
                     }
                     if icon_button(
                         ui,
@@ -187,28 +197,30 @@ impl App {
         });
         #[cfg(not(test))]
         let _ = panel_response;
-        self.ai_history_windows(ctx);
+        self.ai_external_window(ctx);
     }
 
     pub(super) fn ai_new_conversation(&mut self) {
+        self.ai_reset_conversation(None);
+    }
+
+    fn ai_reset_conversation(&mut self, preferences: Option<ai::ComposerPreferences>) {
         self.ai_stop_design();
+        self.ai.history_open = false;
         self.ai.queue.clear();
         self.ai.images.clear();
         self.ai.image_draft = Default::default();
         self.ai.reference_files = Default::default();
         self.ai.references.clear();
-        self.ai.authorization.reset();
-        self.ai.discuss_only = false;
+        self.ai.restore_composer_preferences(preferences);
         self.ai.generation = uuid::Uuid::new_v4().to_string();
         self.ai.session_id = None;
         self.ai.binding = None;
         self.ai.messages.clear();
         self.ai.conversation = Default::default();
-        self.ai.streamed.clear();
-        self.ai.reasoning.clear();
+        self.ai.response = Default::default();
         self.ai.task_error = None;
         self.ai.active_scope = None;
-        self.ai.changes.clear();
         self.ai.page_agents = Default::default();
         self.ai.html.clear();
         self.ai.artifact_open = false;
@@ -233,19 +245,15 @@ impl App {
         let messages = session
             .messages
             .iter()
-            .map(|message| {
-                (
-                    if message.role == design::ChatRole::User {
-                        "你"
-                    } else {
-                        "AI"
-                    }
-                    .into(),
-                    message.text.clone(),
-                )
+            .cloned()
+            .map(|message| response::Message {
+                role: message.role,
+                text: message.text,
+                steps: message.steps,
             })
             .collect();
         let kind = session.kind;
+        let preferences = session.composer_preferences.clone();
         let html = session
             .revisions
             .last()
@@ -254,14 +262,14 @@ impl App {
                 _ => None,
             })
             .unwrap_or_default();
-        self.ai_new_conversation();
+        self.ai_reset_conversation(preferences);
         self.ai.messages = messages;
         self.ai.kind = kind;
         self.ai.html = html;
         self.ai.session_id = Some(id);
         self.ai.active_scope = Some(scope);
         self.ai.binding = self.ai.bindings.get(&id).cloned();
-        self.ai.state = format!("已加载会话 #{id}");
+        self.ai.state = "已打开历史会话".into();
         Ok(())
     }
 
@@ -295,24 +303,7 @@ impl App {
         self.ai.state = "内置示例 · 不是模型生成结果".into();
     }
 
-    fn ai_history_windows(&mut self, ctx: &egui::Context) {
-        if self.ai.history_open {
-            let mut open = true;
-            dialog_style::window(ctx, "工程上下文与历史")
-                .default_width(440.0)
-                .show(ctx, |ui| {
-                    if dialog_style::header(
-                        ui,
-                        dialog_style::Symbol::History,
-                        "工程上下文与历史",
-                        "管理引用范围、聊天会话和设计版本",
-                    ) {
-                        open = false;
-                    }
-                    self.ai_context_history(ui);
-                });
-            self.ai.history_open = open;
-        }
+    fn ai_external_window(&mut self, ctx: &egui::Context) {
         if self.ai.mcp_open {
             let mut open = true;
             dialog_style::window(ctx, "外部 API / MCP")
@@ -334,123 +325,137 @@ impl App {
         }
     }
 
-    fn ai_context_history(&mut self, ui: &mut egui::Ui) {
-        egui::ComboBox::from_id_salt("ai-context")
-            .selected_text(
-                [
-                    "上下文：整个工程",
-                    "上下文：当前页面",
-                    "上下文：当前选择",
-                    "上下文：不自动附带",
-                ][self.ai.context],
-            )
-            .show_ui(ui, |ui| {
-                for (index, label) in [
-                    "整个工程",
-                    "当前页面",
-                    "当前选择",
-                    "不自动附带（读取需授权）",
-                ]
-                .iter()
-                .enumerate()
+    fn ai_history_panel(&mut self, ui: &mut egui::Ui) {
+        use super::composer::{Icon, icon_button};
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("历史会话").size(15.0).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("返回对话").clicked() {
+                    self.ai.history_open = false;
+                    ui.ctx().request_repaint();
+                }
+                if icon_button(
+                    ui,
+                    Icon::Plus,
+                    "新建 AI 会话",
+                    self.ai.running.is_none(),
+                    MUTED,
+                )
+                .clicked()
                 {
-                    ui.selectable_value(&mut self.ai.context, index, *label);
+                    self.ai_new_conversation();
+                    ui.ctx().request_repaint();
                 }
             });
-        ui.label(
-            RichText::new("所附带内容将发送给所选引擎及其实际模型服务；超出范围的读取需授权。")
-                .small()
-                .color(MUTED),
-        );
-        if ui.button("绑定此引擎到当前工程").clicked() {
-            if self
-                .ai
-                .settings
-                .engines
-                .iter()
-                .any(|engine| engine.id == self.ai.selected_engine)
-            {
-                self.ai
-                    .settings
-                    .project_engines
-                    .insert(self.ai_project_key(), self.ai.selected_engine.clone());
-                self.ai.state = if self.ai.persist {
-                    self.ai
-                        .settings
-                        .save_default()
-                        .map(|_| "工程引擎绑定已保存".into())
-                        .unwrap_or_else(|error| error)
-                } else {
-                    "已绑定（验证模式）".into()
-                };
-            } else {
-                self.ai.state = "请先选择已配置的引擎".into();
-            }
-        }
+        });
+        ui.separator();
+        let Some(store) = &self.ai.store else {
+            ui.label(RichText::new("历史记录暂不可用").color(MUTED));
+            return;
+        };
         let scope = self.ai.scope(&self.ai_project_key());
         let sessions = scope
             .as_ref()
-            .and_then(|scope| {
-                self.ai.store.as_ref().map(|store| {
-                    store
-                        .sessions(scope)
-                        .into_iter()
-                        .map(|session| (session.id, session.title.clone()))
-                        .collect::<Vec<_>>()
-                })
-            })
+            .map(|scope| store.sessions(scope))
             .unwrap_or_default();
+        if sessions.is_empty() {
+            ui.label(RichText::new("当前工程和引擎暂无历史会话").color(MUTED));
+            return;
+        }
+        if self.ai.running.is_some() {
+            ui.label(
+                RichText::new("当前回复结束后可切换会话")
+                    .small()
+                    .color(MUTED),
+            );
+        }
         let mut load = None;
-        egui::ComboBox::from_id_salt("ai-history")
-            .selected_text(
-                self.ai
-                    .session_id
-                    .map(|id| format!("会话 #{id}"))
-                    .unwrap_or("历史会话".into()),
-            )
-            .show_ui(ui, |ui| {
-                for (id, title) in sessions {
+        egui::ScrollArea::vertical()
+            .id_salt("ai-history-list")
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 4.0;
+                for session in sessions {
+                    let selected = self.ai.session_id == Some(session.id);
+                    let title = titles::session_title(session);
+                    let row = egui::Button::selectable(selected, RichText::new(&title).size(13.0))
+                        .truncate()
+                        .min_size(vec2(ui.available_width(), 32.0));
                     if ui
-                        .selectable_label(self.ai.session_id == Some(id), format!("#{id} {title}"))
+                        .add_enabled(selected || self.ai.running.is_none(), row)
+                        .on_hover_text(&title)
                         .clicked()
                     {
-                        load = Some(id);
+                        load = Some(session.id);
                     }
                 }
             });
-        if let (Some(id), Some(scope)) = (load, scope)
-            && let Err(error) = self.ai_load_conversation(scope, id)
-        {
-            self.ai.state = error;
+        if let (Some(id), Some(scope)) = (load, scope) {
+            if self.ai.session_id == Some(id) {
+                self.ai.history_open = false;
+            } else if let Err(error) = self.ai_load_conversation(scope, id) {
+                self.ai.state = error;
+            }
+            ui.ctx().request_repaint();
         }
+    }
+
+    fn ai_bind_project_engine(&mut self) {
+        let engine = &self.ai.selected_engine;
+        if !self
+            .ai
+            .settings
+            .engines
+            .iter()
+            .any(|config| &config.id == engine)
+        {
+            self.ai.state = "请先选择已配置的引擎".into();
+            return;
+        }
+        self.ai
+            .settings
+            .project_engines
+            .insert(self.ai_project_key(), engine.clone());
+        self.ai.state = if self.ai.persist {
+            self.ai
+                .settings
+                .save_default()
+                .map(|_| "工程引擎绑定已保存".into())
+                .unwrap_or_else(|error| error)
+        } else {
+            "已绑定（验证模式）".into()
+        };
+    }
+
+    fn ai_versions_menu(&mut self, ui: &mut egui::Ui) {
         let mut restore = None;
-        egui::ComboBox::from_id_salt("ai-versions")
-            .selected_text("生成版本 / 恢复")
-            .show_ui(ui, |ui| {
-                if let (Some(store), Some(scope), Some(id)) =
-                    (&self.ai.store, &self.ai.active_scope, self.ai.session_id)
-                    && let Ok(session) = store.session(scope, id)
-                {
-                    for revision in session.revisions.iter().rev() {
-                        if ui
-                            .button(format!("#{} {}", revision.id, revision.label()))
-                            .clicked()
-                        {
-                            restore = Some(revision.id);
+        ui.menu_button("设计版本 / 恢复", |ui| {
+            if let (Some(store), Some(scope), Some(id)) =
+                (&self.ai.store, &self.ai.active_scope, self.ai.session_id)
+                && let Ok(session) = store.session(scope, id)
+                && !session.revisions.is_empty()
+            {
+                egui::ScrollArea::vertical()
+                    .max_height(240.0)
+                    .show(ui, |ui| {
+                        for revision in session.revisions.iter().rev() {
+                            if ui
+                                .button(format!("#{} {}", revision.id, revision.label()))
+                                .clicked()
+                            {
+                                restore = Some(revision.id);
+                                ui.close();
+                            }
                         }
-                    }
-                }
-            });
+                    });
+            } else {
+                ui.label(RichText::new("当前会话暂无设计版本").color(MUTED));
+            }
+        });
         if let Some(id) = restore
             && let Err(error) = self.ai_restore(id)
         {
             self.ai.state = error;
         }
-        ui.label(
-            RichText::new("聊天历史、生成版本、画布撤销历史互相独立。恢复原生版本后仍可撤销。")
-                .small()
-                .color(MUTED),
-        );
     }
 
     fn ai_external_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {

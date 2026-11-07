@@ -199,7 +199,7 @@ fn validate_token(token: &str) -> Result<(), String> {
 fn forward(address: SocketAddr, token: &str, body: &[u8]) -> Result<Option<Value>, String> {
     let start = Instant::now();
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(3))
-        .map_err(|_| "Cannot connect to live RPShop endpoint")?;
+        .map_err(|_| "Cannot connect to live Ingenaro endpoint")?;
     stream
         .set_read_timeout(Some(Duration::from_millis(200)))
         .map_err(|_| "Cannot configure MCP socket")?;

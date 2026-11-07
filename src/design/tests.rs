@@ -37,6 +37,55 @@ fn html() -> ArtifactContent {
 }
 
 #[test]
+fn response_history_preserves_each_turns_steps_and_tool_only_replies() {
+    let directory = Directory::new();
+    let scope = scope();
+    let mut store = Store::open(&directory.0).unwrap();
+    let session = store
+        .create_session(&scope, ArtifactKind::Native, "两轮对话")
+        .unwrap();
+    let tool = ChatStep {
+        after_text: 0,
+        activity: ChatActivity::Tool {
+            name: "rpshop_read_pages".into(),
+            outcome: Some(true),
+        },
+    };
+    store
+        .append_message(&scope, session, ChatRole::User, "查看页面")
+        .unwrap();
+    store
+        .append_response(&scope, session, "", std::slice::from_ref(&tool))
+        .unwrap();
+    let thinking = ChatStep {
+        after_text: "已检查".len(),
+        activity: ChatActivity::Thinking {
+            text: "继续检查布局。".into(),
+            summary: false,
+        },
+    };
+    store
+        .append_message(&scope, session, ChatRole::User, "看看布局")
+        .unwrap();
+    store
+        .append_response(
+            &scope,
+            session,
+            "已检查，布局清晰。",
+            std::slice::from_ref(&thinking),
+        )
+        .unwrap();
+    drop(store);
+
+    let store = Store::open(&directory.0).unwrap();
+    let messages = &store.session(&scope, session).unwrap().messages;
+    assert!(messages[0].steps.is_empty());
+    assert_eq!(messages[1].steps, [tool]);
+    assert!(messages[2].steps.is_empty());
+    assert_eq!(messages[3].steps, [thinking]);
+}
+
+#[test]
 fn requires_a_bounded_complete_html_document() {
     for invalid in [
         "",
@@ -191,7 +240,7 @@ fn native_restore_is_detached_validated_and_never_touches_project_files() {
     let directory = Directory::new();
     let scope = scope();
     let mut store = Store::open(&directory.0).unwrap();
-    let project_path = directory.0.join("user.rpshop");
+    let project_path = directory.0.join("user.ingenaro");
     fs::write(&project_path, "untouched project").unwrap();
     let session = store
         .create_session(&scope, ArtifactKind::Native, "native")

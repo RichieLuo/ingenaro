@@ -29,11 +29,17 @@ APPLICATIONS = {
     "linkshop": ("LinkShop", "Postman collections and environments", {
         "PostmanJSON": ("Postman collection or environment", [".json"]),
     }),
-    "rpshop": ("RPShop", "RPShop projects and supported native RP documents", {
-        "Project": ("RPShop project", [".rpshop"]),
+    "ingenaro": ("Ingenaro", "Ingenaro projects and supported native RP documents", {
+        "Project": ("Ingenaro project", [".ingenaro", ".rpshop"]),
         "Native": ("Native RP project", [".rp"]),
         "Library": ("Native RP widget library", [".rplib"]),
-        "JSONProject": ("RPShop JSON project", [".json"]),
+        "JSONProject": ("Ingenaro JSON project", [".json"]),
+    }),
+    "rpshop": ("RPShop", "Legacy RPShop projects and supported native RP documents", {
+        "Project": ("Legacy RPShop project", [".rpshop"]),
+        "Native": ("Native RP project", [".rp"]),
+        "Library": ("Native RP widget library", [".rplib"]),
+        "JSONProject": ("Legacy RPShop JSON project", [".json"]),
     }),
 }
 

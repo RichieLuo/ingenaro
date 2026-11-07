@@ -37,7 +37,7 @@ fn session_roundtrip_restores_unsaved_edits_and_repairs_transient_blank_names() 
     app.project.name.clear();
     app.project.pages[0].name = "  ".into();
     app.project.pages[0].widgets[0].text = "未保存的修改".into();
-    app.path = Some(PathBuf::from("existing.rpshop"));
+    app.path = Some(PathBuf::from("existing.ingenaro"));
     let saved = app.saved.clone();
     let mut storage = MemoryStorage::default();
     app.save(&mut storage);
@@ -61,6 +61,6 @@ fn session_roundtrip_restores_unsaved_edits_and_repairs_transient_blank_names() 
         restored.project, restored.saved,
         "recovery must preserve the dirty state"
     );
-    assert_eq!(restored.path, Some(PathBuf::from("existing.rpshop")));
+    assert_eq!(restored.path, Some(PathBuf::from("existing.ingenaro")));
     restored.project.validate().unwrap();
 }

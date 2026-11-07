@@ -239,7 +239,7 @@ fn save_overwrites_without_corrupting_existing_document_on_validation_error() {
         .unwrap()
         .as_nanos();
     let path = std::env::temp_dir().join(format!(
-        "rpshop-model-{}-{nonce}.rpshop",
+        "rpshop-model-{}-{nonce}.ingenaro",
         std::process::id()
     ));
     let mut project = Project::blank();

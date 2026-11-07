@@ -97,20 +97,20 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
    const effort=m.params.input[0].text.match(/effort:(\w+)/)?.[1];
    if(m.params.effort!==effort||m.params.summary!=='auto')process.exit(7);
    const base={threadId:m.params.threadId,turnId:'turn-1',itemId:'summary-1',summaryIndex:0};
-   const reason=delta=>send({method:'item/reasoning/summaryTextDelta',params:{...base,delta}});
+   const reason=delta=>send({method:'item/reasoning/textDelta',params:{...base,contentIndex:0,delta}});
    send({method:'item/reasoning/summaryPartAdded',params:base});
    reason('Check session-');
    send({method:'item/agentMessage/delta',params:{itemId:'answer',delta:'Answer bridge-'}});
-   send({method:'item/reasoning/textDelta',params:{...base,delta:'raw-private-reasoning'}});
+   send({method:'item/reasoning/summaryTextDelta',params:{...base,delta:'duplicate summary'}});
    reason('private-key and bridge-');
    send({method:'item/agentMessage/delta',params:{itemId:'answer',delta:'private-token'}});
    reason('private-token');
-   const completed={method:'item/completed',params:{threadId:m.params.threadId,turnId:'turn-1',item:{id:'summary-1',type:'reasoning',summary:['Check session-private-key and bridge-private-token done'],content:['raw-private-reasoning']}}};
+   const completed={method:'item/completed',params:{threadId:m.params.threadId,turnId:'turn-1',item:{id:'summary-1',type:'reasoning',summary:['duplicate summary'],content:['Check session-private-key and bridge-private-token done']}}};
    send(completed);send(completed);
    send({method:'item/completed',params:{threadId:m.params.threadId,turnId:'turn-1',item:{id:'summary-fallback',type:'reasoning',summary:['Fallback.']}}});
    send({method:'item/completed',params:{item:{id:'answer',type:'agentMessage',text:'Answer bridge-private-token.'}}});
    send({method:'item/completed',params:{item:{id:'answer',type:'agentMessage',text:'Answer bridge-private-token.'}}});
-   send({method:'item/reasoning/summaryTextDelta',params:{...base,itemId:'dangling',delta:' session-'}});
+   send({method:'item/reasoning/textDelta',params:{...base,itemId:'dangling',contentIndex:0,delta:' session-'}});
    if(m.params.input[0].text.includes('summary-error'))send({method:'error',params:{message:'private-provider-error'}});
    else if(!m.params.input[0].text.includes('summary-wait'))send({method:'turn/completed',params:{turn:{status:'completed'}}});
    return;
@@ -158,7 +158,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
   }
   if(m.message.content.includes('public-summary')) {
    const effort=m.message.content.match(/effort:(\w+)/)?.[1];
-   if(args[args.indexOf('--effort')+1]!==effort||args[args.indexOf('--thinking-display')+1]!=='summarized')process.exit(7);
+   if(args[args.indexOf('--effort')+1]!==effort||args.includes('--thinking-display'))process.exit(7);
    const stream=event=>send({type:'stream_event',event});
    stream({type:'message_start',message:{id:'m1'}});
    stream({type:'content_block_start',index:0,content_block:{type:'thinking',thinking:''}});
@@ -375,7 +375,7 @@ fn public_text(events: &[AiEvent], reasoning: bool) -> String {
         .iter()
         .filter_map(|event| match event {
             AiEvent::TextDelta { text } if !reasoning => Some(text.as_str()),
-            AiEvent::ReasoningDelta { text } if reasoning => Some(text.as_str()),
+            AiEvent::ReasoningDelta { text, .. } if reasoning => Some(text.as_str()),
             _ => None,
         })
         .collect()
@@ -436,7 +436,7 @@ fn public_summary_protocols_apply_effort_and_redact_fragmented_credentials_indep
             for private in [
                 "session-private-key",
                 "bridge-private-token",
-                "raw-private-reasoning",
+                "duplicate summary",
             ] {
                 assert!(!serialized.contains(private), "{kind:?} leaked {private}");
             }

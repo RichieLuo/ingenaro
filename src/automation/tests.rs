@@ -47,7 +47,7 @@ fn responsive_layout_round_trips_and_invalid_batches_are_atomic() {
     assert_eq!(project, before);
     batch(&mut project, operations).unwrap();
 
-    let path = std::env::temp_dir().join(format!("responsive-{}.rpshop", uuid::Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("responsive-{}.ingenaro", uuid::Uuid::new_v4()));
     project.save(&path).unwrap();
     let loaded = Project::load(&path);
     std::fs::remove_file(path).unwrap();

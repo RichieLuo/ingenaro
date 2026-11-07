@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/branding/rpshop-owl-logo.png" alt="RPShop 猫头鹰标志" width="560">
+  <img src="assets/branding/ingenaro-spider-wordmark.png" alt="Ingenaro 蜘蛛标志" width="560">
 </p>
 
-# RPShop
+# Ingenaro
 
 ## 目录
 
@@ -17,7 +17,7 @@
 
 ## 项目简介
 
-RPShop 是用 Rust 和 `eframe/egui` 编写的本地桌面原型工具，支持页面与元件编辑、交互制作、浏览器预览，以及 HTML/SVG 导出。新建工程使用独立的 `.rpshop` 格式。
+Ingenaro 是用 Rust 和 `eframe/egui` 编写的本地桌面原型工具，支持页面与元件编辑、交互制作、浏览器预览，以及 HTML/SVG 导出。新建工程使用独立的 `.ingenaro` 格式，同时兼容旧版 `.rpshop` 工程。
 
 原生文件支持范围为已验证样本覆盖的 **RP 8 ZIP 格式 `.rp`** 和 **RP 11 `.rp` / `.rplib`**。支持的编辑可直接保存回原格式；原生兼容属于部分实现，具体版本和写回限制见[本地数据与限制](#本地数据与限制)。功能规划见[路线图](docs/roadmap.md)。
 
@@ -29,7 +29,7 @@ RPShop 是用 Rust 和 `eframe/egui` 编写的本地桌面原型工具，支持�
 | 组件库与表单 | 提供六类共 119 项组件。侧栏支持中英文搜索、分类切换和自适应网格，组件可点击添加或拖入画布。界面组合可以解组编辑，常用图标可以编辑矢量路径。输入框、文本域、复选框、单选按钮、下拉列表和列表框可在预览中操作。详见[组件库对照](docs/widget-library-parity.md)。 |
 | 画布与编辑 | 支持多选、框选、拖动、八向缩放、旋转、网格与吸附，以及剪切、复制、粘贴、创建副本、撤销和重做。支持嵌套编组、图层显隐与锁定、六向对齐、两向分布和层级调整；图片翻转会修改像素，有可用路径的形状可翻转控制点。 |
 | 属性与交互 | 右侧提供“样式 / 交互 / 说明”面板。可新建页面载入、元件单击事件，编辑和排序页面跳转、显隐、设置文本等动作；这些编辑参与撤销、恢复和 HTML 导出。 |
-| 响应式宽度 | `.rpshop` 页面可设置设计宽度和最小宽度。元件支持固定左侧、固定右侧、横向伸展及自定义边缘比例，浏览器预览与 HTML 导出使用相同的布局。 |
+| 响应式宽度 | `.ingenaro` 页面可设置设计宽度和最小宽度。元件支持固定左侧、固定右侧、横向伸展及自定义边缘比例，浏览器预览与 HTML 导出使用相同的布局。 |
 | 预览与导出 | 按 `F5` 在默认浏览器预览当前页，支持页面树、搜索、前进后退、页面深链接、缩放、适应窗口和热点显示。原生预览可运行支持的连续动作、动态面板状态与本工程内框架跳转。整个工程可导出单文件交互 HTML，当前页可导出静态 SVG，图片随工程和导出文件嵌入。 |
 | 本地工作流 | 支持工程打开、保存、会话恢复与定时恢复备份。Windows 提供统一标题栏、开始菜单固定入口、文件打开方式和单实例文件转发。 |
 
@@ -48,7 +48,7 @@ RPShop 是用 Rust 和 `eframe/egui` 编写的本地桌面原型工具，支持�
 
 ### 使用发布包
 
-已有 Windows 便携包时，解压后运行版本目录中的 `rpshop.exe`，无需安装 Rust。
+已有 Windows 便携包时，解压后运行版本目录中的 `ingenaro.exe`，无需安装 Rust。
 
 ### 从源码启动
 
@@ -62,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 run
 
 ```powershell
 cargo run --locked
-cargo run --locked -- .\examples\welcome.rpshop
+cargo run --locked -- .\examples\welcome.ingenaro
 cargo run --locked -- --open .\my-project.rp
 ```
 
@@ -76,16 +76,16 @@ cargo run --locked -- --open .\my-project.rp
 2. 从组件库添加元件，拖动调整位置和尺寸，在属性面板编辑文字与外观。
 3. 进入“交互”，为页面或选中元件新建事件，添加并排序动作。
 4. 按 `F5` 预览，返回编辑器修改后刷新浏览器查看最新内容。
-5. 按 `Ctrl+S` 保存为 `.rpshop`；已有原生文件按支持范围保存回 `.rp` / `.rplib`，也可导出 HTML 或 SVG。
+5. 按 `Ctrl+S` 保存为 `.ingenaro`；已有原生文件按支持范围保存回 `.rp` / `.rplib`，也可导出 HTML 或 SVG。旧 `.rpshop` 工程仍可打开和保存。
 
 后台页面可以在「页面尺寸」选择「响应式宽度」，再设置「设计宽度」和「最小宽度」。选中左侧导航元件，在「水平布局」选「固定左侧」，为右侧内容背景选「横向伸展」。并排表格列可以把相邻边缘设成相同比例，例如两列分别设为 0%–50% 和 50%–100%。按 `F5`，在 100% 缩放下拖动浏览器窗口即可验证。窗口窄于最小宽度时，页面可横向滚动。
 
 | 示例 | 用途 |
 | --- | --- |
-| [欢迎示例](examples/welcome.rpshop) | 页面、基础元件与交互入门 |
-| [组件操作示例](examples/operations.rpshop) | 旋转、直线和组合 |
-| [交互创建示例](examples/interactions.rpshop) | 页面载入、连续显隐、设置文本与页面跳转 |
-| [组件画廊](examples/library.rpshop) / [浏览器画廊](examples/library.html) | 分类浏览组件与预设 |
+| [欢迎示例](examples/welcome.ingenaro) | 页面、基础元件与交互入门 |
+| [组件操作示例](examples/operations.ingenaro) | 旋转、直线和组合 |
+| [交互创建示例](examples/interactions.ingenaro) | 页面载入、连续显隐、设置文本与页面跳转 |
+| [组件画廊](examples/library.ingenaro) / [浏览器画廊](examples/library.html) | 分类浏览组件与预设 |
 
 打开左侧「图层」，按住 `Ctrl` 或 `Shift` 选择多个图层，再点「新建分组」并输入名称。分组可以嵌套，点击名称左边的箭头展开或收起，点击组名选中全组。双击组名或图层名可重命名，也可右键选择「重命名」。
 
@@ -107,7 +107,7 @@ cargo run --locked -- --open .\my-project.rp
 | 设置响应式页面 | `{"op":"update_page","properties":{"canvas":"ResponsiveWidth","width":1280,"responsive_min_width":900}}` |
 | 横向伸展元件 | `{"op":"update_widget","widget_id":2,"properties":{"horizontal_layout":{"left":0,"right":100}}}` |
 
-在 `.rpshop` 工程的左侧「目录」点击「新建文件夹」，右键页面或文件夹可选择「移动到」。文件夹的右键菜单也可以创建子文件夹或页面、重命名和删除文件夹。删除文件夹会将内容移到上一级。AI 可以用 `rpshop_read_pages` 查询目录并用 `rpshop_batch_edit` 操作它。工具发现、参数示例和权限流程见 [RPShop 自动化技能](.agents/skills/rpshop-automation/SKILL.md)。
+在 `.ingenaro` 工程的左侧「目录」点击「新建文件夹」，右键页面或文件夹可选择「移动到」。文件夹的右键菜单也可以创建子文件夹或页面、重命名和删除文件夹。删除文件夹会将内容移到上一级。AI 可以用 `rpshop_read_pages` 查询目录并用 `rpshop_batch_edit` 操作它。工具发现、参数示例和权限流程见 [Ingenaro 自动化技能](.agents/skills/rpshop-automation/SKILL.md)。
 
 <details>
 <summary>快捷键与画布操作</summary>
@@ -145,7 +145,7 @@ cargo run --locked -- --open .\my-project.rp
 | `F5` | 在默认浏览器预览当前页 |
 | `Esc` | 结束文本弹窗、取消绘图或拖动 |
 
-Enter 进入元件编辑、Tab/Shift+Tab 元件遍历、全部工具和容器修饰键尚未覆盖；高精度触控板、缩放动画和可配置移动量仍需核对。系统剪贴板使用 RPShop 自有元件数据格式，不声明与其他编辑器的元件剪贴板互通。
+Enter 进入元件编辑、Tab/Shift+Tab 元件遍历、全部工具和容器修饰键尚未覆盖；高精度触控板、缩放动画和可配置移动量仍需核对。系统剪贴板使用 Ingenaro 自有元件数据格式，不声明与其他编辑器的元件剪贴板互通。
 
 </details>
 
@@ -159,12 +159,12 @@ Enter 进入元件编辑、Tab/Shift+Tab 元件遍历、全部工具和容器修
 powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Install -OutputDirectory .\dist\installed-candidate
 ```
 
-安装后从“开始菜单 → Shop → RPShop”启动。快捷方式始终指向稳定启动器 `%LOCALAPPDATA%\Programs\Shop\RPShop\RPShop.exe`，由它读取最新完整版本的位置。
+安装后从“开始菜单 → Shop → Ingenaro”启动。快捷方式始终指向稳定启动器 `%LOCALAPPDATA%\Programs\Shop\Ingenaro\Ingenaro.exe`，由它读取最新完整版本的位置。
 
 已有完整解压包也可安装：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory 'D:\Packages\RPShop-1.0.0-windows-x64'
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory 'D:\Packages\Ingenaro-1.0.0-windows-x64'
 ```
 
 ### 后续更新
@@ -179,7 +179,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -OutputDirectory 
 
 ### 文件关联
 
-安装会把 `.rpshop`、`.rp`、`.rplib` 和 `.json` 注册为“打开方式”候选，保留现有默认程序。`.json` 内容须为 RPShop 工程，原生文件仍受兼容范围限制。需要默认打开时，请在 Windows“默认应用”或文件的“打开方式”中选择 RPShop；安装脚本不静默更改默认应用。
+安装会把 `.ingenaro`、旧版 `.rpshop`、`.rp`、`.rplib` 和 `.json` 注册为“打开方式”候选，保留现有默认程序。`.json` 内容须为 Ingenaro 工程，原生文件仍受兼容范围限制。需要默认打开时，请在 Windows“默认应用”或文件的“打开方式”中选择 Ingenaro；安装脚本不静默更改默认应用。
 
 Windows 下同一用户登录会话中的重复启动会恢复、聚焦已有窗口，并将文件交给该窗口。当前工程有未保存内容时，继续沿用保存、放弃或取消确认；取消会保留当前工程。命令行导入、示例导出和本地预览服务独立运行，截图模式也与正常图形界面会话隔离。
 
@@ -217,7 +217,7 @@ macOS/Linux 可运行 `python3 scripts/package.py` 生成 tar.gz。各平台所�
 cargo run --locked -- --export-demo .\examples
 ```
 
-此命令会覆盖 `examples/welcome.rpshop`、`examples/welcome.html` 和 `examples/welcome.svg`。重新生成组件画廊可运行 `cargo run --locked --example library-showcase -- examples`。
+此命令会覆盖 `examples/welcome.ingenaro`、`examples/welcome.html` 和 `examples/welcome.svg`。重新生成组件画廊可运行 `cargo run --locked --example library-showcase -- examples`。
 
 生成界面截图：
 
@@ -243,7 +243,7 @@ cargo run --locked -- --screenshot .\docs\screenshots\editor.png
 
 | 文件类型 | 支持范围 |
 | --- | --- |
-| `.rpshop` / RPShop `.json` | 打开、编辑与保存本工具工程 |
+| `.ingenaro`、旧版 `.rpshop` / Ingenaro `.json` | 打开、编辑与保存本工具工程 |
 | RP 8 ZIP 格式 `.rp` | 直接打开，编辑支持的内容并保存回同一 ZIP 原生格式；已有真实样本检查 |
 | RP 11 `.rp` | 直接打开并保存支持的编辑；部分兼容 |
 | RP 11 `.rplib` | 直接打开并保存支持的编辑；部分兼容 |
@@ -255,21 +255,21 @@ cargo run --locked -- --screenshot .\docs\screenshots\editor.png
 
 #### 原生打开与保存
 
-原生文件可直接打开后按 `Ctrl+S` 保存，无需转换为 `.rpshop`。打开后请查看界面的还原与编辑限制，并核对画面和交互。
+原生文件可直接打开后按 `Ctrl+S` 保存，无需转换为 `.ingenaro`。打开后请查看界面的还原与编辑限制，并核对画面和交互。
 
 - 支持范围包括页面重命名、基础元件的文字、位置、尺寸、旋转、样式、显隐与锁定，以及已支持的组件增删、嵌套组、图像/路径翻转和页面跳转；具体取决于版本与元件类型。
 - RP 8 保留 ZIP 容器及嵌套分页对象包，RP 11 更新修改的部件和索引；未编辑部件保留原始字节，不升级或转换文件格式。写入采用同目录临时文件与原子替换，源文件被其他程序修改时拒绝覆盖。
 - 原生保存成功后重新读取文件建立检查点，并重置当前撤销历史。原生页面或文件夹增删、目录结构调整、画板尺寸修改、跨页移动现有组件、复杂容器结构重排和组件库结构修改尚不支持，保存前会拒绝相关操作。
-- 新增单选按钮、文本域、下拉列表和列表框写回原生文件时，当前文件须已有同类对象作为模板；缺少模板时拒绝保存。自有 `.rpshop` 工程没有这项模板限制。基础容器尚不支持原生写回，组合预设也不会转换为原厂专用表格、菜单或树对象。
+- 新增单选按钮、文本域、下拉列表和列表框写回原生文件时，当前文件须已有同类对象作为模板；缺少模板时拒绝保存。自有 `.ingenaro` 工程没有这项模板限制。基础容器尚不支持原生写回，组合预设也不会转换为原厂专用表格、菜单或树对象。
 - 原生文件读取上限为 256 MiB，单个部件解压上限为 64 MiB；自有工程另受模型大小与组件数量限制。完整原厂编辑器互操作尚未验证，未显示的原始数据不代表可以完整编辑。
 
-需要另行生成 RPShop 工程时，可使用可选转换命令：
+需要另行生成 Ingenaro 工程时，可使用可选转换命令：
 
 ```powershell
-cargo run --locked -- --import .\my-project.rp .\my-project.rpshop
+cargo run --locked -- --import .\my-project.rp .\my-project.ingenaro
 ```
 
-输出必须使用 `.rpshop` 扩展名；命令会报告页面、组件与兼容限制。调查依据见[原生文件调查](docs/rea-findings.md)和[兼容调查](docs/native-compat-fix.md)。
+输出使用 `.ingenaro` 扩展名（也接受旧版 `.rpshop`）；命令会报告页面、组件与兼容限制。调查依据见[原生文件调查](docs/rea-findings.md)和[兼容调查](docs/native-compat-fix.md)。
 
 #### 编辑、预览与导出边界
 

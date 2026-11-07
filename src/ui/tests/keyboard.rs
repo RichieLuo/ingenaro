@@ -18,14 +18,14 @@ fn system_clipboard_remaps_names_of_nested_groups_on_paste() {
     let first = add(&mut project, WidgetKind::Text, 30.0, 30.0);
     let second = add(&mut project, WidgetKind::Text, 50.0, 50.0);
     let third = add(&mut project, WidgetKind::Text, 70.0, 70.0);
-    let (inner, _) = rpshop::grouping::group_named(
+    let (inner, _) = ingenaro::grouping::group_named(
         &mut project,
         0,
         &BTreeSet::from([first, second]),
         Some("Inner"),
     )
     .unwrap();
-    let (outer, selected) = rpshop::grouping::group_named(
+    let (outer, selected) = ingenaro::grouping::group_named(
         &mut project,
         0,
         &BTreeSet::from([first, third]),

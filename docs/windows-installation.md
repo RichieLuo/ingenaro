@@ -1,6 +1,6 @@
 # Windows 用户安装与文件打开方式
 
-SQLShop、LinkShop、RPShop 使用相同的当前用户安装流程。需要 Windows、Python 3.9+ 和与本机架构一致的 Windows MSVC 包。安装不需要管理员权限。
+SQLShop、LinkShop、Ingenaro 使用相同的当前用户安装流程。需要 Windows、Python 3.9+ 和与本机架构一致的 Windows MSVC 包。安装不需要管理员权限。
 
 ## 从仓库打包并安装
 
@@ -19,7 +19,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -OutputDirectory 
 已有完整包也可单独安装：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory 'D:\Packages\RPShop-1.0.0-windows-x64'
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory 'D:\Packages\Ingenaro-1.0.0-windows-x64'
 ```
 
 从解压包内执行 `install.ps1` 时可省略 `-PackageDirectory`。仓库中的入口会记录源仓库位置，供以后成功打包自动刷新；独立解压包安装没有源仓库，后续需再次安装新的包或在仓库中显式执行 `-Install`。
@@ -41,11 +41,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\Shop\<Product>.lnk
 ```
 
-`<Product>` 为 `SQLShop`、`LinkShop` 或 `RPShop`。开始菜单快捷方式和注册表中的打开命令都指向稳定启动器，而非某次打包的 `dist` 路径。安装先校验程序、启动器和复制后的整个包，再原子切换 `current.path`；源 `dist` 包以后可以移动。快捷方式图标来自当前版本的程序。
+`<Product>` 为 `SQLShop`、`LinkShop` 或 `Ingenaro`。开始菜单快捷方式和注册表中的打开命令都指向稳定启动器，而非某次打包的 `dist` 路径。安装先校验程序、启动器和复制后的整个包，再原子切换 `current.path`；源 `dist` 包以后可以移动。快捷方式图标来自当前版本的程序。
 
 每次启动都解析最新指针，并将原始 Windows 参数转交给对应程序，支持空格和中文路径。已运行的实例保留当前会话；关闭后重新打开才使用新版本。安装器不会强杀进程、替换正在运行的程序或删除旧版本目录，因此不影响未保存的工作。旧目录暂不自动清理。
 
-三个仓库共用相同的 `src/shell_open.rs`。Windows 下，同一用户登录会话中的同一产品只保留一个 GUI 实例；从开始菜单或文件再次启动会向现有窗口转发请求并恢复、聚焦窗口。SQLShop 只载入 SQL 文件供编辑，不自动执行；SQLite 使用已有本地数据库入口。LinkShop 调用已有 Postman collection / environment 导入。RPShop 打开文件前保留现有未保存确认流程。纯命令行功能继续独立运行，不占用 GUI 单实例入口。
+三个仓库共用相同的 `src/shell_open.rs`。Windows 下，同一用户登录会话中的同一产品只保留一个 GUI 实例；从开始菜单或文件再次启动会向现有窗口转发请求并恢复、聚焦窗口。SQLShop 只载入 SQL 文件供编辑，不自动执行；SQLite 使用已有本地数据库入口。LinkShop 调用已有 Postman collection / environment 导入。Ingenaro 打开文件前保留现有未保存确认流程。纯命令行功能继续独立运行，不占用 GUI 单实例入口。
 
 ## 文件类型与默认应用
 
@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory
 | --- | --- |
 | SQLShop | `.sql`、`.sqlite`、`.sqlite3`、`.db`、`.db3` |
 | LinkShop | `.json`，用于 Postman collection / environment |
-| RPShop | `.rpshop`、`.rp`、`.rplib`、`.json` |
+| Ingenaro | `.ingenaro`、旧版 `.rpshop`、`.rp`、`.rplib`、`.json` |
 
 `.json`、`.db` 等通用扩展名可能属于其他工具；文件仍需符合所选应用实际支持的格式。脚本在 HKCU 注册 `App Paths`、应用/ProgID 打开命令、`OpenWithProgids`、`SupportedTypes` 和 `Capabilities` / `RegisteredApplications`，保留现有扩展名默认值及受保护的 `UserChoice`。注册本身不会静默切换默认应用。
 
@@ -62,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory
 ```text
 ms-settings:defaultapps?registeredAppUser=SQLShop
 ms-settings:defaultapps?registeredAppUser=LinkShop
-ms-settings:defaultapps?registeredAppUser=RPShop
+ms-settings:defaultapps?registeredAppUser=Ingenaro
 ```
 
 这些名称就是 HKCU `Software\RegisteredApplications` 中登记的名称。[Microsoft 的默认应用设置文档](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-apps-settings) 说明了 `registeredAppUser` 参数及适用的 Windows 11 版本；其他版本仍可在“默认应用”中搜索产品名称。安装与打包脚本都不会绕过系统默认应用确认流程。

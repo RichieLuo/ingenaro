@@ -19,9 +19,7 @@ impl App {
             self.view.pending = None;
             self.view.panning = None;
             self.editing = None;
-            self.ai
-                .changes
-                .push(format!("切换到页面 · {}", self.project.pages[index].name));
+            self.status = format!("切换到页面 · {}", self.project.pages[index].name);
         }
         Ok(())
     }

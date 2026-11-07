@@ -1,4 +1,4 @@
-//! RPShop business modules. Desktop startup and presentation live in the binary.
+//! Ingenaro business modules. Desktop startup and presentation live in the binary.
 
 pub mod ai;
 pub mod automation;

@@ -373,7 +373,7 @@ impl App {
                     }
                 }
                 self.ai_reveal
-                    .paint_status(&clipped, page.id, reveal_time, reveal_focus);
+                    .paint_status(ctx, &clipped, page.id, reveal_time, reveal_focus);
                 for w in page
                     .widgets
                     .iter()
@@ -582,7 +582,7 @@ impl App {
                                         self.selected.clear();
                                     }
                                     let inside = ctx.input(|i| i.modifiers.ctrl && i.modifiers.alt);
-                                    self.selected.extend(rpshop::grouping::expanded_selection(
+                                    self.selected.extend(ingenaro::grouping::expanded_selection(
                                         &self.project.pages[self.page],
                                         &BTreeSet::from([id]),
                                         inside,
@@ -621,13 +621,13 @@ impl App {
                         let from = (drag.pointer - origin) / self.zoom;
                         let to = (pos - origin) / self.zoom;
                         self.selected = initial.clone();
-                        self.selected.extend(rpshop::selection::box_select(
+                        self.selected.extend(ingenaro::selection::box_select(
                             &self.project.pages[self.page].widgets,
                             [from.x, from.y],
                             [to.x, to.y],
-                            rpshop::selection::BoxSelectionMode::Contained,
+                            ingenaro::selection::BoxSelectionMode::Contained,
                         ));
-                        self.selected = rpshop::grouping::expanded_selection(
+                        self.selected = ingenaro::grouping::expanded_selection(
                             &self.project.pages[self.page],
                             &self.selected,
                             modifiers.ctrl && modifiers.alt,

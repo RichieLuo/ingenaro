@@ -38,6 +38,62 @@ impl ReasoningEffort {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningPreference {
+    #[default]
+    Engine,
+    Auto,
+    Level(ReasoningEffort),
+}
+
+impl ReasoningPreference {
+    pub fn resolve(self, default: Option<ReasoningEffort>) -> Option<ReasoningEffort> {
+        match self {
+            Self::Engine => default,
+            Self::Auto => None,
+            Self::Level(effort) => Some(effort),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionMode {
+    #[default]
+    Ask,
+    Full,
+    ReadOnly,
+}
+
+impl PermissionMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Ask => "逐次确认",
+            Self::Full => "完全授权",
+            Self::ReadOnly => "只读讨论",
+        }
+    }
+}
+
+/// Composer choices alone. A remembered mode never carries a live tool grant.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ComposerPreferences {
+    pub model: Option<String>,
+    pub effort: ReasoningPreference,
+    pub permission: PermissionMode,
+}
+
+impl ComposerPreferences {
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        if self.model.as_ref().is_some_and(|model| model.len() > 256) {
+            return Err("Invalid AI composer model");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct EngineConfig {
@@ -138,6 +194,8 @@ impl EngineConfig {
 pub struct AiSettings {
     pub engines: Vec<EngineConfig>,
     pub default_engine_id: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub composer_preferences: BTreeMap<String, ComposerPreferences>,
     /// Stable project keys live in app config, never in the project payload.
     pub project_engines: BTreeMap<String, String>,
     /// Canonical paths map to stable app-owned document identities, including first save/rename.
@@ -148,7 +206,7 @@ pub struct AiSettings {
 }
 impl AiSettings {
     pub fn default_path() -> Result<PathBuf, String> {
-        ProjectDirs::from("", "RPShop", "RPShop")
+        ProjectDirs::from("", "Ingenaro", "Ingenaro")
             .map(|d| d.config_dir().join("ai-settings.json"))
             .ok_or_else(|| "Application configuration directory is unavailable".into())
     }
@@ -251,8 +309,12 @@ impl AiSettings {
             .as_ref()
             .is_some_and(|id| !ids.contains(id))
             || self.project_engines.values().any(|id| !ids.contains(id))
+            || self.composer_preferences.keys().any(|id| !ids.contains(id))
         {
             return Err("AI engine binding references a missing engine".into());
+        }
+        for preferences in self.composer_preferences.values() {
+            preferences.validate()?;
         }
         Ok(())
     }
@@ -265,6 +327,7 @@ impl AiSettings {
     }
     pub fn remove_engine(&mut self, id: &str) {
         self.engines.retain(|e| e.id != id);
+        self.composer_preferences.remove(id);
         self.project_engines.retain(|_, value| value != id);
         if self.default_engine_id.as_deref() == Some(id) {
             self.default_engine_id = None;
@@ -315,8 +378,17 @@ mod tests {
     fn settings_roundtrip() {
         let path =
             std::env::temp_dir().join(format!("rpshop-ai-test-{}.json", uuid::Uuid::new_v4()));
+        let engine = EngineConfig::default();
         let settings = AiSettings {
-            engines: vec![EngineConfig::default()],
+            composer_preferences: BTreeMap::from([(
+                engine.id.clone(),
+                ComposerPreferences {
+                    model: Some(String::new()),
+                    effort: ReasoningPreference::Auto,
+                    permission: PermissionMode::ReadOnly,
+                },
+            )]),
+            engines: vec![engine],
             ..Default::default()
         };
         settings.save(&path).unwrap();

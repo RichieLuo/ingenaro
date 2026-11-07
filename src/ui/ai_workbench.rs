@@ -26,15 +26,17 @@ mod qa;
 mod queue;
 mod reference_files;
 mod references;
+mod response;
 mod settings;
 mod steering;
 #[cfg(test)]
 mod tests;
+mod titles;
 mod tools;
 mod views;
 
 use super::*;
-use rpshop::{ai, automation, design};
+use ingenaro::{ai, automation, design};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -71,8 +73,7 @@ pub(super) struct Workbench {
     task_cancelled: Arc<AtomicBool>,
     page_activity: page_activity::PageActivity,
     task_started: Option<Instant>,
-    reasoning: String,
-    effort_override: Option<ai::ReasoningEffort>,
+    effort_override: ai::ReasoningPreference,
     restore_focus_pending: bool,
     external_cancelled: Arc<AtomicBool>,
     pending_new_name: Option<String>,
@@ -87,6 +88,7 @@ pub(super) struct Workbench {
     composer_height: f32,
     ime_active: bool,
     history_open: bool,
+    titles: titles::Titles,
     mcp_open: bool,
     authorization: permissions::Authorization,
     catalogs: HashMap<String, models::CatalogState>,
@@ -98,10 +100,9 @@ pub(super) struct Workbench {
     discuss_only: bool,
     task_readonly: bool,
     model_override: Option<String>,
-    streamed: String,
-    messages: Vec<(String, String)>,
+    response: response::Response,
+    messages: Vec<response::Message>,
     conversation: conversation::ConversationView,
-    changes: Vec<String>,
     html: String,
     source: bool,
     kind: design::ArtifactKind,
@@ -190,8 +191,7 @@ impl Workbench {
             task_cancelled: Arc::new(AtomicBool::new(false)),
             page_activity: Default::default(),
             task_started: None,
-            reasoning: String::new(),
-            effort_override: None,
+            effort_override: Default::default(),
             restore_focus_pending: false,
             external_cancelled: Arc::new(AtomicBool::new(false)),
             pending_new_name: None,
@@ -206,6 +206,7 @@ impl Workbench {
             composer_height: 222.0,
             ime_active: false,
             history_open: false,
+            titles: Default::default(),
             mcp_open: false,
             authorization: Default::default(),
             catalogs: HashMap::new(),
@@ -217,10 +218,9 @@ impl Workbench {
             discuss_only: false,
             task_readonly: false,
             model_override: None,
-            streamed: String::new(),
+            response: Default::default(),
             messages: vec![],
             conversation: Default::default(),
-            changes: vec![],
             html: String::new(),
             source: false,
             kind: design::ArtifactKind::Native,
@@ -269,6 +269,7 @@ impl Workbench {
         self.page_agents.finish();
         if let Some(running) = self.running.take() {
             running.control.cancel();
+            self.finish_response();
         }
         self.agent_server = None;
         self.pending_approval = None;
@@ -279,6 +280,7 @@ impl Workbench {
 
     fn isolate(&mut self) {
         self.cancel();
+        self.history_open = false;
         self.authorization.reset();
         self.queue.clear();
         self.images.clear();
@@ -286,8 +288,8 @@ impl Workbench {
         self.reference_files = Default::default();
         self.references.clear();
         self.page_activity.clear();
-        self.reasoning.clear();
-        self.effort_override = None;
+        self.model_override = None;
+        self.effort_override = Default::default();
         self.discuss_only = false;
         self.external_cancelled.store(true, Ordering::SeqCst);
         self.server = None;
@@ -296,17 +298,38 @@ impl Workbench {
         self.session_id = None;
         self.messages.clear();
         self.conversation = Default::default();
-        self.changes.clear();
         self.page_agents = Default::default();
         self.html.clear();
         self.artifact_open = false;
-        self.streamed.clear();
+        self.response = Default::default();
         self.active_scope = None;
         self.embedded.clear();
     }
 
     fn scope(&self, project_key: &str) -> Option<design::Scope> {
         design::Scope::new(project_key, &self.selected_engine).ok()
+    }
+
+    fn composer_preferences(&self) -> ai::ComposerPreferences {
+        ai::ComposerPreferences {
+            model: self.model_override.clone(),
+            effort: self.effort_override,
+            permission: self.authorization.mode(),
+        }
+    }
+
+    fn restore_composer_preferences(&mut self, preferences: Option<ai::ComposerPreferences>) {
+        let preferences = preferences.unwrap_or_else(|| {
+            self.settings
+                .composer_preferences
+                .get(&self.selected_engine)
+                .cloned()
+                .unwrap_or_default()
+        });
+        self.model_override = preferences.model;
+        self.effort_override = preferences.effort;
+        self.authorization.remember_mode(preferences.permission);
+        self.discuss_only = preferences.permission == ai::PermissionMode::ReadOnly;
     }
 }
 
@@ -318,6 +341,38 @@ impl Drop for Workbench {
 }
 
 impl App {
+    fn ai_save_composer_preferences(&mut self) {
+        let preferences = self.ai.composer_preferences();
+        let engine_id = &self.ai.selected_engine;
+        if self
+            .ai
+            .settings
+            .engines
+            .iter()
+            .any(|engine| &engine.id == engine_id)
+        {
+            self.ai
+                .settings
+                .composer_preferences
+                .insert(engine_id.clone(), preferences.clone());
+            if self.ai.persist
+                && self.ai.config_load_error.is_none()
+                && let Err(error) = self.ai.settings.save_default()
+            {
+                self.ai.state = format!("AI 底栏偏好未保存：{error}");
+            }
+        }
+        if let (Some(store), Some(scope), Some(id)) = (
+            &mut self.ai.store,
+            &self.ai.active_scope,
+            self.ai.session_id,
+        ) && &scope.engine_key == engine_id
+            && let Err(error) = store.set_composer_preferences(scope, id, preferences)
+        {
+            self.ai.state = format!("会话偏好未保存：{error}");
+        }
+    }
+
     fn ai_project_key(&self) -> String {
         self.ai.document_id.clone()
     }
@@ -401,12 +456,14 @@ impl App {
                         .clone()
                         .unwrap_or_default()
                 });
+            self.ai.restore_composer_preferences(None);
         }
         self.ai_poll_discovery();
         self.ai_poll_images();
         self.ai_poll_reference_files();
         self.ai_poll_palette(ctx);
         self.poll_ai_events();
+        self.ai_poll_titles(ctx);
         self.poll_ai_tools(ctx);
         self.ai_poll_queue();
         if self.ai.page_activity.prune(&self.project) || self.ai.restore_focus_pending {

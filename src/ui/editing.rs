@@ -138,7 +138,7 @@ impl App {
             .native
             .as_ref()
             .map_or(id, |native| native.selection_owner(id));
-        let hit = rpshop::grouping::expanded_selection(
+        let hit = ingenaro::grouping::expanded_selection(
             &self.project.pages[self.page],
             &BTreeSet::from([id]),
             inside,
@@ -181,9 +181,9 @@ impl App {
             }
         }
         let selected = if ungroup {
-            rpshop::grouping::ungroup(&mut draft, self.page, &self.selected)?
+            ingenaro::grouping::ungroup(&mut draft, self.page, &self.selected)?
         } else {
-            rpshop::grouping::group_named(&mut draft, self.page, &self.selected, name)?.1
+            ingenaro::grouping::group_named(&mut draft, self.page, &self.selected, name)?.1
         };
         if let Some(native) = &self.native {
             let locks = before.pages[self.page]
@@ -237,7 +237,7 @@ impl App {
             Ok((selected, dropped_layout)) => {
                 self.selected = selected;
                 if dropped_layout {
-                    self.status = "已按固定尺寸粘贴，响应式布局仅支持 RPShop 工程".into();
+                    self.status = "已按固定尺寸粘贴，响应式布局仅支持 Ingenaro 工程".into();
                 }
             }
             Err(error) => self.status = format!("粘贴失败：{error:#}"),
@@ -248,7 +248,7 @@ impl App {
 pub(super) fn flip_widgets(
     page: &mut Page,
     selected: &BTreeSet<u64>,
-    native: Option<&rpshop::rp_format::NativeDocument>,
+    native: Option<&ingenaro::rp_format::NativeDocument>,
     horizontal: bool,
 ) -> anyhow::Result<usize> {
     let mut count = 0;
@@ -268,11 +268,11 @@ pub(super) fn flip_widgets(
             && native.is_none_or(|native| native.is_bitmap_widget(widget.id));
         if is_bitmap {
             if let Some(data) = &widget.image_data {
-                widget.image_data = Some(rpshop::bitmap::flip_data_uri(data, horizontal)?);
+                widget.image_data = Some(ingenaro::bitmap::flip_data_uri(data, horizontal)?);
                 count += 1;
             }
         } else if widget.vector_points.is_some() {
-            rpshop::vector_edit::flip_widget(widget, horizontal)?;
+            ingenaro::vector_edit::flip_widget(widget, horizontal)?;
             count += 1;
         }
     }
@@ -311,7 +311,7 @@ pub(super) fn paste_widgets(
         }
         w.locked = false;
     }
-    let groups = rpshop::grouping::remap_group_ids(&mut widgets, &mut next_id)?;
+    let groups = ingenaro::grouping::remap_group_ids(&mut widgets, &mut next_id)?;
     for w in &mut widgets {
         if let Some(id) = w.interaction.target_widget.and_then(|v| remap.get(&v)) {
             w.interaction.target_widget = Some(*id);

@@ -65,7 +65,10 @@ fn toolbar_anchor_and_effort_track_stay_fixed_across_all_effort_labels() {
                 Some(ai::ReasoningEffort::Max),
                 None,
             ] {
-                app.ai.effort_override = value;
+                app.ai.effort_override = value.map_or(
+                    ai::ReasoningPreference::Auto,
+                    ai::ReasoningPreference::Level,
+                );
                 for frame_index in 0..3 {
                     render(&mut app, &context, width, vec![]);
                     assert_eq!(
@@ -121,7 +124,8 @@ fn toolbar_anchor_and_effort_track_stay_fixed_across_all_effort_labels() {
                 for held_frame in 0..3 {
                     render(&mut app, &context, width, vec![]);
                     assert_eq!(
-                        app.ai.effort_override, value,
+                        app.ai.effort_override.resolve(None),
+                        value,
                         "drag value bounced: dpi={dpi}, width={width}, held_frame={held_frame}"
                     );
                     assert_eq!(control_bounds(&context, "model"), anchor);

@@ -122,7 +122,9 @@ impl App {
         for image in &submission.images {
             display.push_str(&format!("\n[图片：{}]", image.name()));
         }
-        self.ai.messages.push(("你".into(), display.clone()));
+        self.ai
+            .messages
+            .push(response::Message::new(design::ChatRole::User, &display));
         self.ai.state = "引擎已接收引导 · 继续当前任务".into();
         if let (Some(store), Some(scope), Some(id)) = (
             &mut self.ai.store,

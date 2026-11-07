@@ -1,4 +1,4 @@
-//! RPShop dialog system: one surface, custom headers, readable sections and clear actions.
+//! Ingenaro dialog system: one surface, custom headers, readable sections and clear actions.
 use eframe::egui::{self, Color32, FontId, RichText, Stroke, StrokeKind, vec2};
 
 pub(super) const ACCENT: Color32 = Color32::from_rgb(105, 79, 218);
@@ -12,7 +12,6 @@ pub(super) enum Symbol {
     Text,
     Info,
     Settings,
-    History,
     Link,
     Preview,
 }
@@ -247,11 +246,6 @@ fn paint_symbol(p: &egui::Painter, r: egui::Rect, symbol: Symbol, color: Color32
                 p.line_segment([v(-9.0, y), v(9.0, y)], s);
                 p.circle(v(x, y), 2.3, Color32::from_rgb(241, 237, 255), s);
             }
-        }
-        Symbol::History => {
-            p.circle_stroke(c, 9.0, s);
-            p.line_segment([v(0.0, -5.0), v(0.0, 0.0)], s);
-            p.line_segment([v(0.0, 0.0), v(5.0, 3.0)], s);
         }
         Symbol::Link => {
             for d in [-1.0, 1.0] {

@@ -263,7 +263,7 @@ pub(super) fn patch(
     for event in &current.interaction_events {
         ensure!(
             is_authored_case(&event.id),
-            "新增原生用例必须使用RPShop生成的交互标识"
+            "新增原生用例必须使用Ingenaro生成的交互标识"
         );
         let package = pages.get(&event.page).context("交互页面原生绑定不存在")?;
         let source = if let Some(owner) = event.owner {

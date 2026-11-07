@@ -68,7 +68,7 @@ impl CliFixture {
                 Instant::now() < deadline,
                 "{phase} timed out: {}; changes: {:?}",
                 self.app.ai.state,
-                self.app.ai.changes
+                self.app.ai.response.steps
             );
             frame(&mut self.app, ctx, vec![]);
             std::thread::park_timeout(Duration::from_millis(2));
@@ -397,7 +397,7 @@ fn cli_queue_codex_attachments_and_selection_reach_document_transaction_and_undo
 
     // Exercise the actual host gate, not execute_ai_tool or a synthetic ToolHost reply.
     let output = frame(&mut f.app, &ctx, vec![]);
-    let approve = text_center(&output, "允许本次 RPShop 工具操作");
+    let approve = text_center(&output, "允许本次 Ingenaro 工具操作");
     click(&mut f.app, &ctx, approve);
     f.drive_until(&ctx, "queued CLI turn completes after tool result", |app| {
         app.ai.running.is_none() && app.ai.queue.len() == 0
@@ -408,18 +408,29 @@ fn cli_queue_codex_attachments_and_selection_reach_document_transaction_and_undo
     assert!(f.app.ai.agent_server.is_none());
     assert_eq!(f.read("tool-result.json")["success"], true);
     assert_eq!(
-        f.app.ai.messages,
+        f.app
+            .ai
+            .messages
+            .iter()
+            .map(|message| (message.role, message.text.as_str()))
+            .collect::<Vec<_>>(),
         vec![
-            ("你".into(), FIRST_PROMPT.into()),
-            ("AI".into(), FIRST_REPLY.into()),
+            (design::ChatRole::User, FIRST_PROMPT),
+            (design::ChatRole::Assistant, FIRST_REPLY),
             (
-                "你".into(),
-                format!("{second_prompt}\n[参考图片：queued-reference.png]\n[参考文件：admin.css]")
+                design::ChatRole::User,
+                &format!(
+                    "{second_prompt}\n[参考图片：queued-reference.png]\n[参考文件：admin.css]"
+                )
             ),
-            ("AI".into(), SECOND_REPLY.into()),
+            (design::ChatRole::Assistant, SECOND_REPLY),
         ]
     );
-    assert!(f.app.ai.changes.iter().any(|s| s == "工具执行完成"));
+    assert!(f.app.ai.messages[1].steps.is_empty());
+    assert!(f.app.ai.messages[3].steps.iter().any(|step| matches!(
+        &step.activity,
+        design::ChatActivity::Tool { name, outcome: Some(true) } if name == "rpshop_batch_edit"
+    )));
     assert_eq!(f.app.ai.images.len(), 1);
     assert_eq!(f.app.ai.images[0].id(), later_image_id);
     assert_eq!(

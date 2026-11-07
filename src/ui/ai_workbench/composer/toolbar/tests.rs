@@ -102,7 +102,10 @@ fn model_control_opens_the_effort_slider() {
     let _ = frame(&mut app, &context, vec![]);
     let high = effort_bounds(&context, Some(ai::ReasoningEffort::High)).center();
     click(&mut app, &context, high);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::High));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::High)
+    );
 }
 fn open_modes(app: &mut App, context: &egui::Context, entry: &'static str) -> egui::FullOutput {
     let _ = frame(app, context, vec![]);
@@ -170,7 +173,7 @@ fn selecting_read_only_revokes_the_existing_grant() {
 }
 
 #[test]
-fn effort_selection_keeps_popup_open_and_auto_clears_engine_default() {
+fn effort_selection_keeps_popup_open_and_auto_overrides_engine_default() {
     let mut app = app();
     app.ai.settings.engines[0].reasoning_effort = Some(ai::ReasoningEffort::High);
     let context = egui::Context::default();
@@ -179,8 +182,11 @@ fn effort_selection_keeps_popup_open_and_auto_clears_engine_default() {
     let automatic = effort_bounds(&context, None).center();
     assert!(automatic.x < high.x);
     click(&mut app, &context, automatic);
-    assert!(app.ai.effort_override.is_none());
-    assert!(app.ai.settings.engines[0].reasoning_effort.is_none());
+    assert_eq!(app.ai.effort_override, ai::ReasoningPreference::Auto);
+    assert_eq!(
+        app.ai.settings.engines[0].reasoning_effort,
+        Some(ai::ReasoningEffort::High)
+    );
     assert!(egui::Popup::is_any_open(&context));
     let output = frame(&mut app, &context, vec![]);
     text_center(&output, "思考（自动）");
@@ -203,7 +209,10 @@ fn effort_slider_supports_keyboard_and_escape_closes_the_popup() {
     open_modes(&mut app, &context, "model");
     let low = effort_bounds(&context, Some(ai::ReasoningEffort::Low)).center();
     click(&mut app, &context, low);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Low));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Low)
+    );
     let press = |key| egui::Event::Key {
         key,
         physical_key: None,
@@ -212,11 +221,17 @@ fn effort_slider_supports_keyboard_and_escape_closes_the_popup() {
         modifiers: egui::Modifiers::NONE,
     };
     frame(&mut app, &context, vec![press(egui::Key::ArrowRight)]);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Medium));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Medium)
+    );
     frame(&mut app, &context, vec![press(egui::Key::End)]);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Max));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Max)
+    );
     frame(&mut app, &context, vec![press(egui::Key::Home)]);
-    assert_eq!(app.ai.effort_override, None);
+    assert_eq!(app.ai.effort_override, ai::ReasoningPreference::Auto);
     frame(&mut app, &context, vec![press(egui::Key::Escape)]);
     assert!(!egui::Popup::is_any_open(&context));
 }
@@ -240,7 +255,10 @@ fn effort_slider_drag_uses_only_the_supported_discrete_steps() {
         vec![egui::Event::PointerMoved(low), pointer(low, true)],
     );
     frame(&mut app, &context, vec![egui::Event::PointerMoved(max)]);
-    assert_eq!(app.ai.effort_override, Some(ai::ReasoningEffort::Max));
+    assert_eq!(
+        app.ai.effort_override.resolve(None),
+        Some(ai::ReasoningEffort::Max)
+    );
     frame(&mut app, &context, vec![pointer(max, false)]);
     assert!(egui::Popup::is_any_open(&context));
 }
@@ -256,9 +274,123 @@ fn unknown_model_efforts_leave_permissions_available_but_slider_disabled() {
     text_center(&output, "选择模型");
     text_center(&output, "思考（自动）");
     click(&mut app, &context, effort_bounds(&context, None).center());
-    assert_eq!(app.ai.effort_override, None);
+    assert_eq!(app.ai.effort_override, ai::ReasoningPreference::Engine);
     assert!(egui::Popup::is_any_open(&context));
     assert!(app.ai_has_full_permission());
+}
+
+#[test]
+fn composer_choices_follow_new_chats_and_reload_with_their_own_history() {
+    use ai::{PermissionMode, ReasoningEffort};
+
+    let mut app = app();
+    let engine_id = app.ai.selected_engine.clone();
+    app.ai.settings.engines[0].reasoning_effort = Some(ReasoningEffort::High);
+    app.ai
+        .catalogs
+        .get_mut(&engine_id)
+        .unwrap()
+        .catalog
+        .models
+        .push(ai::ModelInfo {
+            id: "quick".into(),
+            name: "Quick".into(),
+            description: String::new(),
+            is_default: false,
+            reasoning_efforts: vec!["high".into()],
+        });
+    let directory = std::env::temp_dir().join(format!("rpshop-composer-{}", uuid::Uuid::new_v4()));
+    app.ai.store = Some(design::Store::open(&directory).unwrap());
+    let scope = app.ai.scope(&app.ai_project_key()).unwrap();
+    app.ai_record_version(
+        "first",
+        design::ArtifactContent::Native(Project::blank()),
+        false,
+    );
+    let first = app.ai.session_id.unwrap();
+
+    let context = egui::Context::default();
+    let output = open_modes(&mut app, &context, "model");
+    click(
+        &mut app,
+        &context,
+        text_center(&output, "沿用 CLI 默认模型"),
+    );
+    frame(&mut app, &context, vec![]);
+    let low = effort_bounds(&context, Some(ReasoningEffort::Low)).center();
+    click(&mut app, &context, low);
+    egui::Popup::close_all(&context);
+    let output = open_modes(&mut app, &context, "permission");
+    click(&mut app, &context, text_center(&output, "只读讨论"));
+
+    app.ai_new_conversation();
+    let engine = app.ai_submission_engine().unwrap();
+    assert!(engine.model.is_empty());
+    assert_eq!(engine.reasoning_effort, Some(ReasoningEffort::Low));
+    assert!(app.ai.discuss_only);
+
+    let legacy = app
+        .ai
+        .store
+        .as_mut()
+        .unwrap()
+        .create_session(&scope, design::ArtifactKind::Native, "旧会话")
+        .unwrap();
+    app.ai_load_conversation(scope.clone(), legacy).unwrap();
+    assert!(app.ai.discuss_only);
+    assert_eq!(
+        app.ai_submission_engine().unwrap().reasoning_effort,
+        Some(ReasoningEffort::Low)
+    );
+
+    app.ai_new_conversation();
+    let output = open_modes(&mut app, &context, "model");
+    click(&mut app, &context, text_center(&output, "Quick"));
+    frame(&mut app, &context, vec![]);
+    click(&mut app, &context, effort_bounds(&context, None).center());
+    egui::Popup::close_all(&context);
+    app.ai_change_permission(PermissionMode::Ask);
+    app.ai_record_version(
+        "second",
+        design::ArtifactContent::Native(Project::blank()),
+        false,
+    );
+    let second = app.ai.session_id.unwrap();
+    drop(app.ai.store.take());
+    app.ai.store = Some(design::Store::open(&directory).unwrap());
+
+    app.ai_load_conversation(scope.clone(), first).unwrap();
+    assert_eq!(app.ai.selected_engine, engine_id);
+    assert!(app.ai.discuss_only);
+    let engine = app.ai_submission_engine().unwrap();
+    assert!(engine.model.is_empty());
+    assert_eq!(engine.reasoning_effort, Some(ReasoningEffort::Low));
+    app.ai_load_conversation(scope, second).unwrap();
+    assert_eq!(app.ai.authorization.mode(), PermissionMode::Ask);
+    assert!(!app.ai.discuss_only);
+    let engine = app.ai_submission_engine().unwrap();
+    assert_eq!(engine.model, "quick");
+    assert_eq!(engine.reasoning_effort, None);
+
+    drop(app);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn remembered_full_mode_confirms_before_sending_in_a_new_chat() {
+    let mut app = app();
+    assert!(app.ai_has_full_permission());
+    app.ai_new_conversation();
+    assert_eq!(app.ai.authorization.mode(), ai::PermissionMode::Full);
+    assert!(!app.ai_has_full_permission());
+    assert!(!app.ai.authorization.confirm_full);
+
+    app.ai.prompt = "设计页面".into();
+    app.ai_submit();
+    assert!(app.ai.authorization.confirm_full);
+    assert!(!app.ai_has_full_permission());
+    assert!(app.ai.running.is_none());
+    assert_eq!(app.ai.prompt, "设计页面");
 }
 
 #[test]

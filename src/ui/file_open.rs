@@ -19,13 +19,13 @@ impl App {
                 if let Some(path) = paths.into_iter().next() {
                     if !path.is_file()
                         || !path.extension().is_some_and(|extension| {
-                            ["rp", "rplib", "rpshop", "json"]
+                            ["rp", "rplib", "ingenaro", "rpshop", "json"]
                                 .iter()
                                 .any(|kind| extension.eq_ignore_ascii_case(kind))
                         })
                     {
                         self.status =
-                            format!("打开失败：{} 不是已有的 RP / RPShop 工程", path.display());
+                            format!("打开失败：{} 不是已有的 RP / Ingenaro 工程", path.display());
                         return;
                     }
                     self.pending_open = Some(path);

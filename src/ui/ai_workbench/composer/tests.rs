@@ -1,5 +1,5 @@
 use super::*;
-use crate::ui::tests::{click, fixture, frame, text_center};
+use crate::ui::tests::{click, fixture, frame, right_click, text_center};
 use serde_json::json;
 
 fn key(modifiers: egui::Modifiers) -> egui::Event {
@@ -9,6 +9,15 @@ fn key(modifiers: egui::Modifiers) -> egui::Event {
         pressed: true,
         repeat: false,
         modifiers,
+    }
+}
+fn release_enter() -> egui::Event {
+    egui::Event::Key {
+        key: egui::Key::Enter,
+        physical_key: Some(egui::Key::Enter),
+        pressed: false,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
     }
 }
 fn app() -> App {
@@ -41,7 +50,11 @@ fn enter_sends_but_shift_enter_inserts_newline() {
         app.ai.settings_open
     );
     assert!(!app.ai.settings_open);
-    frame(&mut app, &context, vec![key(egui::Modifiers::NONE)]);
+    frame(
+        &mut app,
+        &context,
+        vec![release_enter(), key(egui::Modifiers::NONE)],
+    );
     // No configured engine: the send action opens settings, never consumes the draft.
     assert!(app.ai.settings_open);
     assert!(app.ai.prompt.contains("先保留布局"));
@@ -57,6 +70,7 @@ fn ime_confirmation_never_submits_the_draft() {
         &context,
         vec![
             egui::Event::Ime(egui::ImeEvent::Enabled),
+            egui::Event::Text("peise".into()),
             egui::Event::Ime(egui::ImeEvent::Preedit("peise".into())),
         ],
     );
@@ -64,12 +78,39 @@ fn ime_confirmation_never_submits_the_draft() {
         &mut app,
         &context,
         vec![
+            egui::Event::Ime(egui::ImeEvent::Disabled),
             egui::Event::Ime(egui::ImeEvent::Commit("配色".into())),
             key(egui::Modifiers::NONE),
         ],
     );
+    assert_eq!(app.ai.prompt, "配色");
     assert!(!app.ai.settings_open);
     assert!(app.ai.messages.is_empty());
+    frame(
+        &mut app,
+        &context,
+        vec![release_enter(), key(egui::Modifiers::NONE)],
+    );
+    assert!(app.ai.settings_open);
+}
+
+#[test]
+fn right_click_cut_uses_the_composer_selection() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    focus_prompt(&mut app, &ctx);
+    let output = frame(&mut app, &ctx, vec![egui::Event::Text("中文草稿".into())]);
+    let draft = text_center(&output, "中文草稿");
+    let menu = right_click(&mut app, &ctx, draft);
+    click(&mut app, &ctx, text_center(&menu, "全选"));
+    let output = frame(&mut app, &ctx, vec![]);
+    let menu = right_click(&mut app, &ctx, text_center(&output, "中文草稿"));
+    click(&mut app, &ctx, text_center(&menu, "剪切"));
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(app.ai.prompt.is_empty());
+    assert!(output.platform_output.commands.iter().any(
+        |command| matches!(command, egui::OutputCommand::CopyText(text) if text == "中文草稿")
+    ));
 }
 
 #[test]

@@ -227,7 +227,7 @@ fn clean_legacy_session_reopens_source_but_unmatched_dirty_draft_is_preserved() 
 
 #[test]
 fn customer_master_preview_groups_save_rebind_and_ungroup_without_touching_source() {
-    use rpshop::rp_format::{binary, container};
+    use ingenaro::rp_format::{binary, container};
     use std::collections::BTreeMap;
 
     let Some(source) = std::env::var_os("RPSHOP_NATIVE_FIXTURE").map(PathBuf::from) else {
@@ -389,7 +389,7 @@ fn customer_master_preview_groups_save_rebind_and_ungroup_without_touching_sourc
     app.page = page_index;
     app.path = Some(path.clone());
     app.selected = selected;
-    let marker = "RPShop master preview group regression";
+    let marker = "Ingenaro master preview group regression";
     app.project.pages[page_index]
         .widgets
         .iter_mut()
@@ -483,7 +483,7 @@ fn customer_master_preview_groups_save_rebind_and_ungroup_without_touching_sourc
         })
         .unwrap();
     reopened_app.page = page_index;
-    reopened_app.selected = rpshop::grouping::expanded_selection(
+    reopened_app.selected = ingenaro::grouping::expanded_selection(
         &reopened_app.project.pages[page_index],
         &BTreeSet::from([id]),
         false,

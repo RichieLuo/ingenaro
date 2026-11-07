@@ -81,12 +81,12 @@ fn installed_native_form_templates_save_to_copies_with_true_types() {
         widget.text = if kind.is_option_list() {
             "First\nSecond"
         } else {
-            "RPShop form text"
+            "Ingenaro form text"
         }
         .into();
-        widget.name = format!("RPShop {}", kind.label());
+        widget.name = format!("Ingenaro {}", kind.label());
         if kind == WidgetKind::Radio {
-            widget.radio_group = Some("RPShop group".into());
+            widget.radio_group = Some("Ingenaro group".into());
         }
     }
     let destination = directory.join("forms.rplib");
@@ -108,7 +108,7 @@ fn installed_native_form_templates_save_to_copies_with_true_types() {
         assert!(
             widget
                 .name
-                .ends_with(&format!(" / RPShop {}", kind.label())),
+                .ends_with(&format!(" / Ingenaro {}", kind.label())),
             "library gallery names retain their component prefix: {}",
             widget.name
         );
@@ -117,11 +117,11 @@ fn installed_native_form_templates_save_to_copies_with_true_types() {
             if kind.is_option_list() {
                 "First\nSecond"
             } else {
-                "RPShop form text"
+                "Ingenaro form text"
             }
         );
         if kind == WidgetKind::Radio {
-            assert_eq!(widget.radio_group.as_deref(), Some("RPShop group"));
+            assert_eq!(widget.radio_group.as_deref(), Some("Ingenaro group"));
         }
     }
     assert_eq!(std::fs::read(&library).unwrap(), source);
@@ -131,8 +131,8 @@ fn installed_native_form_templates_save_to_copies_with_true_types() {
     let mut edited = native.project.clone();
     let id = edited.allocate_id();
     let mut widget = Widget::new(id, WidgetKind::Radio, 120.0, 160.0);
-    widget.name = "RPShop radio template".into();
-    widget.radio_group = Some("RPShop new group".into());
+    widget.name = "Ingenaro radio template".into();
+    widget.radio_group = Some("Ingenaro new group".into());
     widget.text = "Native radio".into();
     edited.pages[0].widgets.push(widget);
     let destination = directory.join("forms.rp");
@@ -141,11 +141,11 @@ fn installed_native_form_templates_save_to_copies_with_true_types() {
     let widget = reopened.project.pages[0]
         .widgets
         .iter()
-        .find(|widget| widget.name == "RPShop radio template")
+        .find(|widget| widget.name == "Ingenaro radio template")
         .unwrap();
     assert_eq!(widget.kind, WidgetKind::Radio);
     assert_eq!(widget.text, "Native radio");
-    assert_eq!(widget.radio_group.as_deref(), Some("RPShop new group"));
+    assert_eq!(widget.radio_group.as_deref(), Some("Ingenaro new group"));
     assert_eq!(std::fs::read(&project_path).unwrap(), source);
     std::fs::remove_dir_all(directory).unwrap();
 }
