@@ -50,14 +50,14 @@ impl CliFixture {
         loop {
             let failure = std::fs::read_to_string(self.dir.join("failure.txt")).unwrap_or_default();
             assert!(failure.is_empty(), "{phase}: {failure}");
+            if done(&self.app) {
+                return;
+            }
             assert!(
                 self.app.ai.task_error.is_none(),
                 "{phase}: {}",
                 self.app.ai.state
             );
-            if done(&self.app) {
-                return;
-            }
             assert!(
                 Instant::now() < deadline,
                 "{phase}: {} · {:?}",
@@ -69,13 +69,32 @@ impl CliFixture {
         }
     }
 
-    fn first_edits(&mut self, ctx: &egui::Context) -> Vec<u64> {
-        self.drive(ctx, "all five first edits", |app| {
-            app.project.pages.len() == 6
-                && app.project.pages[1..]
-                    .iter()
-                    .all(|page| !page.widgets.is_empty())
+    fn first_edits(&mut self, ctx: &egui::Context, page_count: usize) -> Vec<u64> {
+        self.drive(ctx, "early write waits for the other groups", |app| {
+            !app.ai.page_agents.waiting_edits.is_empty()
         });
+        assert_eq!(self.app.project.pages.len(), page_count + 1);
+        assert!(
+            self.app
+                .project
+                .pages
+                .iter()
+                .all(|page| page.widgets.is_empty())
+        );
+        assert_eq!(self.app.ai_progress_text(0.0), "正在启动子代理 · 1/3");
+        std::fs::write(self.dir.join("launch-rest"), "").unwrap();
+        let dir = self.dir.clone();
+        self.drive(
+            ctx,
+            "all groups apply and acknowledge their first edits",
+            |app| {
+                app.project.pages.len() == page_count + 1
+                    && app.project.pages[1..]
+                        .iter()
+                        .all(|page| !page.widgets.is_empty())
+                    && (0..3).all(|slot| dir.join(format!("edited-{slot}")).is_file())
+            },
+        );
         let pages = &self.app.project.pages;
         let ids: Vec<_> = pages[1..].iter().map(|page| page.id).collect();
         assert!(pages[0].widgets.is_empty());
@@ -86,7 +105,7 @@ impl CliFixture {
         assert_eq!(self.app.ai.page_agents.progress(), (3, 3));
         assert_eq!(self.app.ai_activity_page_ids(), ids);
         assert!(self.app.ai_page_overview_visible());
-        assert_eq!(self.app.undo.len(), 6);
+        assert_eq!(self.app.undo.len(), page_count + 1);
         ids
     }
 
@@ -108,19 +127,22 @@ impl Drop for CliFixture {
     }
 }
 
-fn check_parallel_design(kind: ai::EngineKind, prompt: &str) {
+fn check_parallel_design(kind: ai::EngineKind, prompt: &str, page_count: usize) {
     let Some(mut test) = CliFixture::new(kind, prompt) else {
         return;
     };
     let ctx = egui::Context::default();
-    let ids = test.first_edits(&ctx);
+    let ids = test.first_edits(&ctx, page_count);
     let output = frame(&mut test.app, &ctx, vec![]);
     let indicator = text_center(&output, "子代理 3/3");
     click(&mut test.app, &ctx, indicator);
     let output = frame(&mut test.app, &ctx, vec![]);
     text_center(&output, "页面子代理 · 3 个运行中");
     text_center(&output, "设计任务 0");
-    text_center(&output, "设计中 · 已应用 2 批");
+    text_center(
+        &output,
+        &format!("设计中 · 已应用 {} 批", if page_count == 9 { 3 } else { 2 }),
+    );
     click(&mut test.app, &ctx, indicator);
 
     test.release(1);
@@ -138,6 +160,8 @@ fn check_parallel_design(kind: ai::EngineKind, prompt: &str) {
     test.release(0);
     test.release(2);
     test.drive(&ctx, "main turn completes", |app| app.ai.running.is_none());
+    assert!(test.app.ai.task_error.is_none());
+    assert_eq!(test.app.project.pages.len(), page_count + 1);
     assert_eq!(test.app.ai.page_agents.progress(), (0, 3));
     assert!(
         test.app
@@ -177,12 +201,30 @@ fn claude_delegates_unsized_request_and_resumes_one_parent() {
     check_parallel_design(
         ai::EngineKind::Claude,
         "设计登录、注册、首页、订单和设置页面",
+        5,
     );
 }
 
 #[test]
-fn codex_can_group_five_pages_into_three_native_subagents() {
-    check_parallel_design(ai::EngineKind::Codex, "设计五个页面并让相关页面共用导航");
+fn codex_launches_all_three_groups_of_nine_pages_before_writing() {
+    check_parallel_design(ai::EngineKind::Codex, "设计九个独立页面", 9);
+}
+
+#[test]
+fn finishing_the_main_turn_with_unlaunched_groups_reports_failure() {
+    let Some(mut test) = CliFixture::new(ai::EngineKind::Codex, "验证分工未全部启动")
+    else {
+        return;
+    };
+    let ctx = egui::Context::default();
+    test.drive(&ctx, "main turn ends with missing groups", |app| {
+        app.ai.running.is_none()
+    });
+    assert_eq!(
+        test.app.ai.task_error.as_deref(),
+        Some("本轮还有 2 组页面子代理未启动")
+    );
+    assert!(test.app.ai.queue.paused);
 }
 
 #[test]
@@ -192,7 +234,7 @@ fn stopping_native_agents_revokes_the_parent_tool_capability() {
         return;
     };
     let ctx = egui::Context::default();
-    test.first_edits(&ctx);
+    test.first_edits(&ctx, 5);
     let before = test.app.project.clone();
     let control = test.app.ai.running.as_ref().unwrap().control.clone();
     test.app.ai_stop_design();
@@ -207,9 +249,6 @@ fn stopping_native_agents_revokes_the_parent_tool_capability() {
             .iter()
             .all(|row| row.state == SubagentState::Stopped)
     );
-    for slot in 0..3 {
-        test.release(slot);
-    }
     test.drive(&ctx, "parent CLI shuts down", |_| control.is_finished());
     assert_eq!(test.app.project, before);
 }

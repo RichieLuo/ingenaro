@@ -4,12 +4,16 @@
 mod bridge;
 mod edit;
 mod library;
+mod reference_files;
 mod schema;
 mod server;
 mod stdio;
 
 pub use bridge::{ToolClient, ToolHost, ToolRequest};
-pub use schema::{DESIGN_PAGES_TOOL, EDIT_PAGE_TOOL, MAX_PAGE_SUBAGENTS, tools};
+pub use reference_files::{MAX_REFERENCE_BYTES, MAX_REFERENCE_FILES, ReferenceFile};
+pub use schema::{
+    DESIGN_PAGES_TOOL, EDIT_PAGE_TOOL, MAX_PAGE_SUBAGENTS, MIN_PAGE_SUBAGENTS, tools,
+};
 pub use server::{Server, start};
 pub use stdio::run_stdio;
 
@@ -111,6 +115,11 @@ fn execute_inner(
                 "library_note":"The complete GUI component catalog is available via rpshop_read_library and create_library_item. Table (12 editable grouped Rectangle cells), menus and trees are composite presets, not additional WidgetKind variants. Inspect item_id defaults, then use returned real widget/group IDs for later edits.",
                 "edit_tool": "rpshop_batch_edit",
                 "batch_operations": schema::batch_operations(page_only),
+                "responsive_layout": {
+                    "available":!native,
+                    "canvas":"ResponsiveWidth",
+                    "note":"Set page width to the design reference, and set responsive_min_width for horizontal scrolling on narrow screens. Set widget horizontal_layout left/right percentages to anchor or stretch; at 100% zoom the browser relayout keeps font sizes."
+                },
                 "limits": {"pages":128,"widgets_per_page":5000,"widgets":20000,
                     "batch_operations":512,"group_depth":32,"argument_bytes":MAX_ARGUMENT_BYTES},
                 "native_constraints": {
@@ -134,7 +143,8 @@ fn execute_inner(
             fields(args, &[])?;
             Ok(json!({"pages":project.pages.iter().map(|p|json!({
                 "id":p.id,"name":p.name,"width":p.width,"height":p.height,
-                "canvas":p.canvas,"background":p.background,"widget_count":p.widgets.len()
+                "canvas":p.canvas,"responsive_min_width":p.responsive_min_width(),
+                "background":p.background,"widget_count":p.widgets.len()
             })).collect::<Vec<_>>(),"page_tree":project.page_tree}))
         }
         "rpshop_read_selection" => {

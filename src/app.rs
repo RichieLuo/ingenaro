@@ -33,6 +33,14 @@ pub fn run() -> eframe::Result {
         .with_decorations(!cfg!(target_os = "windows"))
         .with_inner_size([1500.0, 950.0])
         .with_min_inner_size([1100.0, 720.0]);
+    #[cfg(target_os = "macos")]
+    {
+        viewport = viewport
+            .with_fullsize_content_view(true)
+            .with_titlebar_shown(false)
+            .with_title_shown(false)
+            .with_titlebar_buttons_shown(true);
+    }
     viewport = viewport.with_icon(branding::icon_data());
     let options = eframe::NativeOptions {
         viewport,

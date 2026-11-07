@@ -156,6 +156,9 @@ pub struct Page {
     /// Auto pages are an unbounded editor surface; width/height remain export bounds.
     #[serde(default)]
     pub canvas: CanvasMode,
+    /// Optional minimum viewport width for a responsive page, in design pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub responsive_min_width: Option<f32>,
     pub background: String,
     pub widgets: Vec<Widget>,
     /// Custom names for groups whose IDs occur in this page's widget paths.
@@ -170,11 +173,12 @@ pub enum CanvasMode {
     Auto,
     FixedWidth,
     FixedHeight,
+    ResponsiveWidth,
 }
 
 impl CanvasMode {
     pub fn is_auto(self) -> bool {
-        self != Self::Fixed
+        self.auto_width() || self.auto_height()
     }
     pub fn auto_width(self) -> bool {
         matches!(self, Self::Auto | Self::FixedHeight)
@@ -196,6 +200,11 @@ pub struct TextLayout {
 }
 
 impl Page {
+    pub fn responsive_min_width(&self) -> Option<f32> {
+        (self.canvas == CanvasMode::ResponsiveWidth)
+            .then(|| self.responsive_min_width.unwrap_or(self.width.min(320.0)))
+    }
+
     pub fn group_name(&self, id: u64) -> Cow<'_, str> {
         self.group_names.get(&id).map_or_else(
             || Cow::Owned(format!("分组 {id}")),
@@ -239,6 +248,33 @@ impl Page {
 #[cfg(test)]
 mod canvas_metadata_tests;
 
+/// Percentage of the viewport width change that each edge follows.
+/// At the design width every component keeps its authored geometry.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+pub struct HorizontalLayout {
+    pub left: f32,
+    pub right: f32,
+}
+
+impl HorizontalLayout {
+    pub const LEFT: Self = Self {
+        left: 0.0,
+        right: 0.0,
+    };
+    pub const RIGHT: Self = Self {
+        left: 100.0,
+        right: 100.0,
+    };
+    pub const STRETCH: Self = Self {
+        left: 0.0,
+        right: 100.0,
+    };
+
+    fn is_default(&self) -> bool {
+        *self == Self::LEFT
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Widget {
     pub id: u64,
@@ -252,6 +288,8 @@ pub struct Widget {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    #[serde(default, skip_serializing_if = "HorizontalLayout::is_default")]
+    pub horizontal_layout: HorizontalLayout,
     /// Clockwise degrees around the widget's center.
     #[serde(default)]
     pub rotation: f32,
@@ -385,6 +423,7 @@ impl Widget {
             y,
             width,
             height,
+            horizontal_layout: HorizontalLayout::default(),
             rotation: 0.0,
             groups: Vec::new(),
             vector_points: None,
@@ -438,6 +477,7 @@ impl Project {
                 width: 1280.0,
                 height: 800.0,
                 canvas: CanvasMode::Fixed,
+                responsive_min_width: None,
                 background: "#FFFFFF".to_owned(),
                 widgets: Vec::new(),
                 group_names: BTreeMap::new(),

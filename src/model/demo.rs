@@ -703,6 +703,7 @@ fn sample_page(id: u64, name: &str) -> Page {
         width: 1280.0,
         height: 800.0,
         canvas: CanvasMode::Fixed,
+        responsive_min_width: None,
         background: "#F4F7FB".to_owned(),
         widgets: Vec::new(),
         group_names: Default::default(),

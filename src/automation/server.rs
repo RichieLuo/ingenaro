@@ -259,8 +259,18 @@ fn dispatch(state: &State, request: Value) -> Response {
             );
             state.pending.lock().unwrap().remove(&key);
             match result {
-                Ok(value) => json!({"content":[{"type":"text","text":value.to_string()}],
-                    "structuredContent":if value.is_object(){value}else{json!({"result":value})},"isError":false}),
+                Ok(mut value) => {
+                    let image = value
+                        .as_object_mut()
+                        .and_then(|v| v.remove("_rpshop_image"));
+                    let mut content = vec![json!({"type":"text","text":value.to_string()})];
+                    if let Some(url) = image.and_then(|v| v.as_str().map(str::to_owned))
+                        && let Some(data) = url.strip_prefix("data:image/png;base64,")
+                    {
+                        content.push(json!({"type":"image","mimeType":"image/png","data":data}));
+                    }
+                    json!({"content":content,"structuredContent":if value.is_object(){value}else{json!({"result":value})},"isError":false})
+                }
                 Err(error) => json!({"content":[{"type":"text","text":error}],"isError":true}),
             }
         }

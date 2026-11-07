@@ -25,6 +25,7 @@ enum Operation {
         height: Option<f32>,
         background: Option<String>,
         canvas: Option<CanvasMode>,
+        responsive_min_width: Option<f32>,
     },
     UpdatePage {
         page_id: Option<u64>,
@@ -225,6 +226,10 @@ fn native_preflight(operation: &Operation) -> Result<()> {
             let fields = properties
                 .as_object()
                 .context("Widget properties must be an object")?;
+            ensure!(
+                !fields.contains_key("horizontal_layout"),
+                "Responsive layout is supported in .rpshop projects"
+            );
             // Added presets use exactly the same layout/vector metadata as GUI
             // creation. Existing source support is decided by host.preview_scene,
             // not by a blanket prohibition based only on the native flag.
@@ -259,7 +264,14 @@ fn native_preflight(operation: &Operation) -> Result<()> {
     Ok(())
 }
 
-const PAGE_FIELDS: &[&str] = &["name", "width", "height", "canvas", "background"];
+const PAGE_FIELDS: &[&str] = &[
+    "name",
+    "width",
+    "height",
+    "canvas",
+    "responsive_min_width",
+    "background",
+];
 const WIDGET_FIELDS: &[&str] = &[
     "name",
     "kind",
@@ -268,6 +280,7 @@ const WIDGET_FIELDS: &[&str] = &[
     "y",
     "width",
     "height",
+    "horizontal_layout",
     "rotation",
     "text",
     "fill",
@@ -356,6 +369,7 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
             height,
             background,
             canvas,
+            responsive_min_width,
         } => {
             let id = allocate(project, id)?;
             ensure!(project.pages.len() < 128, "Page count exceeds 128");
@@ -366,6 +380,7 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
                 height: height.unwrap_or(800.0),
                 background: background.unwrap_or_else(|| "#FFFFFF".into()),
                 canvas: canvas.unwrap_or_default(),
+                responsive_min_width,
                 widgets: Vec::new(),
                 group_names: Default::default(),
             });

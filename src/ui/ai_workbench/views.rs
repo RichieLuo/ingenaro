@@ -195,6 +195,7 @@ impl App {
         self.ai.queue.clear();
         self.ai.images.clear();
         self.ai.image_draft = Default::default();
+        self.ai.reference_files = Default::default();
         self.ai.references.clear();
         self.ai.authorization.reset();
         self.ai.discuss_only = false;

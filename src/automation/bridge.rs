@@ -6,6 +6,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use super::ToolCall;
+use super::reference_files::{self, LocalReferences, ReferenceFile};
 use super::schema::{self, ToolSet};
 use serde_json::Value;
 
@@ -48,6 +49,8 @@ pub struct ToolClient {
     cancelled: Arc<AtomicBool>,
     unbounded: bool,
     tool_set: ToolSet,
+    reference_files: Arc<[ReferenceFile]>,
+    local_references: LocalReferences,
 }
 
 pub struct ToolHost {
@@ -66,6 +69,8 @@ impl ToolHost {
                 cancelled: Arc::new(AtomicBool::new(false)),
                 unbounded: false,
                 tool_set: ToolSet::General,
+                reference_files: Arc::default(),
+                local_references: LocalReferences::default(),
             },
         )
     }
@@ -85,11 +90,23 @@ impl ToolClient {
             cancelled,
             unbounded: self.unbounded,
             tool_set: self.tool_set,
+            reference_files: self.reference_files.clone(),
+            local_references: self.local_references.clone(),
         }
     }
 
     pub fn with_parallel_design(mut self) -> Self {
         self.tool_set = ToolSet::Design;
+        self
+    }
+
+    pub fn with_reference_files(mut self, files: Vec<ReferenceFile>) -> Self {
+        self.reference_files = files.into();
+        self
+    }
+
+    pub fn with_reference_prompt(mut self, prompt: &str) -> Self {
+        self.local_references = LocalReferences::new(prompt);
         self
     }
 
@@ -134,6 +151,18 @@ impl ToolClient {
             return Err("Tool request cancelled".into());
         }
         let start = Instant::now();
+        if call.name == reference_files::READ_TOOL {
+            if !self.supports_tool(&call.name) {
+                return Err("Unknown tool".into());
+            }
+            let result = reference_files::read(
+                &self.reference_files,
+                &self.local_references,
+                &call.arguments,
+            );
+            self.check_wait(stopped, interrupted, start, timeout)?;
+            return result;
+        }
         let cancelled = interrupted.clone();
         // Cancels queued and already received requests on every return path.
         struct Cancel(Arc<AtomicBool>);

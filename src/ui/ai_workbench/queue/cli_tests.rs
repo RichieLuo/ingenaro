@@ -10,6 +10,7 @@ const SECOND_PROMPT: &str = "第二条请看图片修改选中引用元件";
 const FIRST_REPLY: &str = "CLI 第一轮完成";
 const SECOND_REPLY: &str = "CLI 图片和固定引用已验证，真实元件已更新";
 const EDITED_TEXT: &str = "由排队的本地 CLI 工具事务更新";
+const REFERENCE_CSS: &str = ":root { --accent: #12805c; }";
 
 struct CliFixture {
     app: App,
@@ -145,6 +146,7 @@ readline.createInterface({input: process.stdin}).on('line', line => check(() => 
       const edit = m.params.dynamicTools.find(tool => tool.name === 'rpshop_batch_edit');
       assert.equal(edit.type, 'function');
       assert.equal(edit.inputSchema.type, 'object');
+      assert(m.params.dynamicTools.some(tool => tool.name === 'rpshop_read_reference_file'));
     } else {
       round = 2;
       assert.equal(m.params.threadId, session);
@@ -162,6 +164,7 @@ readline.createInterface({input: process.stdin}).on('line', line => check(() => 
     if (round === 1) {
       assert.equal(input.length, 1, 'first turn must not steal the queued image');
       assert(input[0].text.endsWith('\n\nUser request:\n' + expected.firstPrompt));
+      assert(!input[0].text.includes('admin.css'));
       send({id: m.id, result: {turn: {id: 'turn-1'}}});
       record('first-turn.json', m);
       const barrier = setInterval(() => check(() => {
@@ -187,6 +190,8 @@ readline.createInterface({input: process.stdin}).on('line', line => check(() => 
       assert.equal(png.readUInt32BE(20), 1);
       const text = input[0].text;
       assert(text.endsWith('\n\nUser request:\n' + expected.secondPrompt));
+      assert(text.includes('admin.css'));
+      assert(!text.includes(expected.referenceCss), 'source is sent only when the model reads it');
       const frozenPrefix = '这条需求发送时固定的引用上下文：';
       const currentPrefix = '\n执行时当前工程页面摘要：';
       const start = text.indexOf(frozenPrefix);
@@ -199,13 +204,40 @@ readline.createInterface({input: process.stdin}).on('line', line => check(() => 
       assert.equal(current.page_names.find(page => page.id === expected.pageId).name, expected.laterPageName);
       record('second-turn.json', m);
       send({id: m.id, result: {turn: {id: 'turn-2'}}});
-      requestedEdit = true;
-      send({id: 40, method: 'item/tool/call', params: {
-        threadId: session, turnId: 'turn-2', callId: 'queued-edit', tool: 'rpshop_batch_edit',
-        arguments: {operations: [{op: 'update_widget', page_id: expected.pageId,
-          widget_id: frozen.selected_widgets.widget_ids[0], properties: {text: expected.editedText}}]}
+      send({id: 38, method: 'item/tool/call', params: {
+        threadId: session, turnId: 'turn-2', callId: 'reference-list', tool: 'rpshop_read_reference_file',
+        arguments: {}
       }});
     }
+  } else if (m.id === 38 && m.result) {
+    assert.equal(m.result.success, true);
+    const result = JSON.parse(m.result.contentItems[0].text);
+    assert.deepEqual(result.files.map(file => [file.file_id, file.name]), [[1, 'admin.css']]);
+    send({id: 39, method: 'item/tool/call', params: {
+      threadId: session, turnId: 'turn-2', callId: 'reference-read', tool: 'rpshop_read_reference_file',
+      arguments: {file_id: 1}
+    }});
+  } else if (m.id === 39 && m.result) {
+    assert.equal(m.result.success, true);
+    const result = JSON.parse(m.result.contentItems[0].text);
+    const expected = JSON.parse(fs.readFileSync(file('expected.json'), 'utf8'));
+    assert.equal(result.text, expected.referenceCss);
+    assert.equal(result.next_offset, null);
+    send({id: 37, method: 'item/tool/call', params: {
+      threadId: session, turnId: 'turn-2', callId: 'source-from-chat', tool: 'rpshop_read_reference_file',
+      arguments: {local_path: expected.sourceFolder, path: 'admin.css'}
+    }});
+  } else if (m.id === 37 && m.result) {
+    assert.equal(m.result.success, true);
+    const result = JSON.parse(m.result.contentItems[0].text);
+    const expected = JSON.parse(fs.readFileSync(file('expected.json'), 'utf8'));
+    assert.equal(result.text, expected.referenceCss);
+    requestedEdit = true;
+    send({id: 40, method: 'item/tool/call', params: {
+      threadId: session, turnId: 'turn-2', callId: 'queued-edit', tool: 'rpshop_batch_edit',
+      arguments: {operations: [{op: 'update_widget', page_id: expected.pageId,
+        widget_id: expected.widgetId, properties: {text: expected.editedText}}]}
+    }});
   } else if (m.id === 40 && m.result) {
     assert(requestedEdit, 'unexpected dynamic tool response');
     assert.equal(m.result.success, true, 'host must execute the real document transaction');
@@ -227,7 +259,7 @@ readline.createInterface({input: process.stdin}).on('line', line => check(() => 
 "#;
 
 #[test]
-fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction_and_undo_redo() {
+fn cli_queue_codex_attachments_and_selection_reach_document_transaction_and_undo_redo() {
     let Some(mut f) = CliFixture::new() else {
         return;
     };
@@ -246,12 +278,21 @@ fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction
         ai::ImageAttachment::from_rgba("queued-reference.png", 1, 1, &[23, 145, 211, 255]).unwrap();
     let image_id = image.id().to_owned();
     let later_page_name = "入队后由用户重命名的页面";
+    let source_folder = f.dir.join("admin source");
+    std::fs::create_dir(&source_folder).unwrap();
+    std::fs::write(source_folder.join("admin.css"), REFERENCE_CSS).unwrap();
+    let second_prompt = format!(
+        "{SECOND_PROMPT}\n同时参考 `{}` 中的配色。",
+        source_folder.display()
+    );
     std::fs::write(
         f.dir.join("expected.json"),
         serde_json::to_vec(&json!({
-            "firstPrompt": FIRST_PROMPT, "secondPrompt": SECOND_PROMPT,
+            "firstPrompt": FIRST_PROMPT, "secondPrompt": second_prompt,
             "firstReply": FIRST_REPLY, "secondReply": SECOND_REPLY,
             "imageUrl": image.data_url(), "context": frozen_context,
+            "referenceCss": REFERENCE_CSS,
+            "sourceFolder": source_folder,
             "pageId": page_id, "widgetId": target.id,
             "laterPageName": later_page_name, "editedText": EDITED_TEXT,
         }))
@@ -277,15 +318,24 @@ fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction
     // No '@' syntax and no manual reference construction: ai_submit captures selection.
     f.app.selected.insert(target.id);
     f.app.ai.images.push(image);
-    f.app.ai.prompt = SECOND_PROMPT.into();
+    let path = f.dir.join("admin.css");
+    std::fs::write(&path, REFERENCE_CSS).unwrap();
+    f.app
+        .ai
+        .reference_files
+        .files
+        .push(automation::ReferenceFile::open(&path).unwrap());
+    f.app.ai.prompt = second_prompt.clone();
     f.app.ai_submit();
     assert!(f.app.ai.prompt.is_empty());
     assert!(f.app.ai.images.is_empty());
+    assert!(f.app.ai.reference_files.files.is_empty());
     assert_eq!(f.app.ai.queue.len(), 1);
     let queued = f.app.ai.queue.entries().next().unwrap();
     assert_eq!(queued.context_mode, 2);
     assert_eq!(queued.context, frozen_context);
     assert_eq!(queued.images[0].id(), image_id);
+    assert_eq!(queued.reference_files[0].name, "admin.css");
     assert_eq!(f.app.ai.messages.len(), 1, "queued input is not sent yet");
     assert!(!f.dir.join("second-turn.json").exists());
 
@@ -300,6 +350,12 @@ fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction
         ai::ImageAttachment::from_rgba("later-unsent.png", 1, 1, &[255, 0, 0, 255]).unwrap();
     let later_image_id = later_image.id().to_owned();
     f.app.ai.images.push(later_image);
+    std::fs::write(&path, "new draft CSS").unwrap();
+    f.app
+        .ai
+        .reference_files
+        .files
+        .push(automation::ReferenceFile::open(&path).unwrap());
     for _ in 0..3 {
         frame(&mut f.app, &ctx, vec![]);
     }
@@ -358,7 +414,7 @@ fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction
             ("AI".into(), FIRST_REPLY.into()),
             (
                 "你".into(),
-                format!("{SECOND_PROMPT}\n[参考图片：queued-reference.png]")
+                format!("{second_prompt}\n[参考图片：queued-reference.png]\n[参考文件：admin.css]")
             ),
             ("AI".into(), SECOND_REPLY.into()),
         ]
@@ -366,6 +422,10 @@ fn cli_queue_codex_image_and_automatic_selection_reach_real_document_transaction
     assert!(f.app.ai.changes.iter().any(|s| s == "工具执行完成"));
     assert_eq!(f.app.ai.images.len(), 1);
     assert_eq!(f.app.ai.images[0].id(), later_image_id);
+    assert_eq!(
+        f.app.ai.reference_files.files[0].byte_len(),
+        "new draft CSS".len()
+    );
     let mut expected_project = before_transaction.clone();
     expected_project.pages[0].widgets[0].text = EDITED_TEXT.into();
     assert_eq!(

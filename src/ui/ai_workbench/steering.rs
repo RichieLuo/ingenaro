@@ -4,6 +4,7 @@ use super::*;
 pub(super) struct Pending {
     submission: queue::Submission,
     receipt: mpsc::Receiver<Result<(), String>>,
+    queue_id: Option<u64>,
 }
 impl App {
     pub(super) fn ai_steer(&mut self) {
@@ -11,8 +12,44 @@ impl App {
             self.ai.state = "上一条引导正在等待确认".into();
             return;
         }
+        let submission = match self.ai_capture_submission() {
+            Ok(submission) => submission,
+            Err(error) => {
+                self.ai.state = error;
+                return;
+            }
+        };
+        self.ai_steer_submission(submission, None);
+    }
+
+    pub(super) fn ai_steer_queued(&mut self, id: u64) {
+        let Some(submission) = self
+            .ai
+            .queue
+            .entries()
+            .find(|entry| entry.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        self.ai_steer_submission(submission, Some(id));
+    }
+
+    fn ai_steer_submission(&mut self, submission: queue::Submission, queue_id: Option<u64>) {
+        if self.ai.steering.is_some() {
+            self.ai.state = "上一条引导正在等待确认".into();
+            return;
+        }
         let result = (|| {
-            let submission = self.ai_capture_submission()?;
+            if submission.scope != self.ai_project_key()
+                || submission.generation != self.ai.generation
+                || submission.engine.id != self.ai.selected_engine
+            {
+                return Err("这条消息不属于当前工程或会话，不能引导当前对话".into());
+            }
+            if !submission.reference_files.is_empty() {
+                return Err("附带参考文件时请使用排队发送".into());
+            }
             let binding = self
                 .ai
                 .binding
@@ -35,6 +72,7 @@ impl App {
             Ok(Pending {
                 submission,
                 receipt,
+                queue_id,
             })
         })();
         match result {
@@ -67,7 +105,9 @@ impl App {
             return;
         }
         // Edits made while waiting for acknowledgement are never erased.
-        if self.ai.prompt == submission.prompt
+        if let Some(id) = pending.queue_id {
+            self.ai.queue.remove(id);
+        } else if self.ai.prompt == submission.prompt
             && self
                 .ai
                 .images
@@ -113,6 +153,7 @@ mod tests {
             app.ai.steering = Some(Pending {
                 submission,
                 receipt,
+                queue_id: None,
             });
             if changed {
                 app.ai.prompt = "等待时的新编辑".into();
@@ -151,6 +192,7 @@ mod tests {
         app.ai.steering = Some(Pending {
             submission,
             receipt,
+            queue_id: None,
         });
         app.ai_submit();
         assert_eq!(app.ai.queue.len(), 0);
@@ -160,5 +202,36 @@ mod tests {
         app.ai_poll_steering();
         assert!(app.ai.messages.is_empty());
         assert_eq!(app.ai.prompt, "补充要求");
+    }
+    #[test]
+    fn queued_steering_removes_only_after_ack_and_never_clears_draft() {
+        for accepted in [false, true] {
+            let mut app = fixture(Project::default());
+            let config = ai::EngineConfig::new(ai::EngineKind::Codex);
+            app.ai.selected_engine = config.id.clone();
+            app.ai.settings.engines.push(config);
+            app.ai.prompt = "排队的消息".into();
+            let submission = app.ai_capture_submission().unwrap();
+            let id = app.ai.queue.push(submission.clone()).unwrap();
+            app.ai.prompt = "另一条草稿".into();
+            let (tx, receipt) = mpsc::channel();
+            app.ai.steering = Some(Pending {
+                submission,
+                receipt,
+                queue_id: Some(id),
+            });
+            app.ai_poll_queue();
+            assert_eq!(app.ai.queue.len(), 1);
+            tx.send(if accepted {
+                Ok(())
+            } else {
+                Err("拒绝".into())
+            })
+            .unwrap();
+            app.ai_poll_steering();
+            assert_eq!(app.ai.queue.len(), usize::from(!accepted));
+            assert_eq!(app.ai.prompt, "另一条草稿");
+            assert_eq!(app.ai.messages.len(), usize::from(accepted));
+        }
     }
 }

@@ -3,6 +3,11 @@ use super::*;
 
 impl App {
     pub(super) fn ai_progress_text(&self, time: f64) -> String {
+        let unstarted = self.ai.page_agents.unstarted_count();
+        if unstarted > 0 {
+            let planned = self.ai.page_agents.planned_count();
+            return format!("正在启动子代理 · {}/{planned}", planned - unstarted);
+        }
         if self.ai.page_agents.has_active() {
             let (active, total) = self.ai.page_agents.progress();
             return if self.ai.pending_tool.is_some() {
@@ -10,10 +15,6 @@ impl App {
             } else {
                 format!("子代理设计 · {active}/{total} 运行中")
             };
-        }
-        let planned = self.ai.page_agents.planned_count();
-        if planned > 0 && self.ai.page_agents.progress().1 == 0 {
-            return format!("已分配 {planned} 项子任务 · 等待启动");
         }
         if self.ai_reveal.is_active(time) {
             return format!("正在绘制 · {} 个元件", self.ai_reveal.active_count(time));

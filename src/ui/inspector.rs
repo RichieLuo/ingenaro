@@ -1,5 +1,5 @@
 use super::*;
-use rpshop::model::CanvasMode;
+use rpshop::model::{CanvasMode, HorizontalLayout};
 
 impl App {
     pub(super) fn inspector_panel(&mut self, ctx: &egui::Context) {
@@ -269,7 +269,9 @@ impl App {
                         else {
                             return;
                         };
-                        let widget = &mut self.project.pages[self.page].widgets[index];
+                        let page = &mut self.project.pages[self.page];
+                        let responsive = page.canvas == CanvasMode::ResponsiveWidth;
+                        let widget = &mut page.widgets[index];
                         ui.label(RichText::new(widget.kind.label()).strong().size(15.0));
                         ui.add_space(12.0);
                         ui.label("组件名称");
@@ -345,6 +347,9 @@ impl App {
                                     );
                                     ui.end_row();
                                 });
+                            if responsive {
+                                horizontal_layout_controls(ui, &mut widget.horizontal_layout);
+                            }
                             ui.add_space(15.0);
                             ui.separator();
                             ui.add_space(12.0);
@@ -470,6 +475,7 @@ impl App {
             CanvasMode::FixedWidth => format!("{:.0} × Auto", page.width),
             CanvasMode::FixedHeight => format!("Auto × {:.0}", page.height),
             CanvasMode::Fixed => format!("{:.0} × {:.0}", page.width, page.height),
+            CanvasMode::ResponsiveWidth => "响应式宽度".to_owned(),
         };
         if native {
             ui.allocate_ui_with_layout(
@@ -492,6 +498,7 @@ impl App {
                         (CanvasMode::Fixed, "固定宽高"),
                         (CanvasMode::FixedWidth, "固定宽度"),
                         (CanvasMode::FixedHeight, "固定高度"),
+                        (CanvasMode::ResponsiveWidth, "响应式宽度"),
                     ] {
                         ui.selectable_value(&mut page.canvas, mode, label);
                     }
@@ -507,7 +514,11 @@ impl App {
                     .spacing([10.0, 8.0])
                     .show(ui, |ui| {
                         if !page.canvas.auto_width() {
-                            ui.label("宽度");
+                            ui.label(if page.canvas == CanvasMode::ResponsiveWidth {
+                                "设计宽度"
+                            } else {
+                                "宽度"
+                            });
                             ui.add(
                                 egui::DragValue::new(&mut page.width)
                                     .range(64.0..=20000.0)
@@ -524,10 +535,34 @@ impl App {
                             );
                             ui.end_row();
                         }
+                        if let Some(minimum) = page.responsive_min_width() {
+                            let mut width = minimum.min(page.width);
+                            ui.label("最小宽度");
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut width)
+                                        .range(64.0..=page.width)
+                                        .suffix(" px"),
+                                )
+                                .on_hover_text("预览窄于此宽度时可以横向滚动")
+                                .changed()
+                                || width != minimum
+                            {
+                                page.responsive_min_width = Some(width);
+                            }
+                            ui.end_row();
+                        }
                     });
             })
             .response
             .on_disabled_hover_text("原生页面的静态尺寸目前只读，保存时保留原设置");
+        }
+        if page.canvas == CanvasMode::ResponsiveWidth {
+            ui.label(
+                RichText::new("画布按设计宽度编辑。浏览器预览按元件的水平布局伸缩。")
+                    .small()
+                    .color(MUTED),
+            );
         }
         ui.separator();
         ui.add_enabled(
@@ -688,6 +723,43 @@ fn inspector_tabs(ui: &mut egui::Ui, tab: &mut usize) {
     });
 }
 
+fn horizontal_layout_controls(ui: &mut egui::Ui, layout: &mut HorizontalLayout) {
+    ui.add_space(10.0);
+    ui.label(RichText::new("水平布局").strong());
+    ui.horizontal_wrapped(|ui| {
+        for (preset, label) in [
+            (HorizontalLayout::LEFT, "固定左侧"),
+            (HorizontalLayout::RIGHT, "固定右侧"),
+            (HorizontalLayout::STRETCH, "横向伸展"),
+        ] {
+            if ui.selectable_label(*layout == preset, label).clicked() {
+                *layout = preset;
+            }
+        }
+    });
+    egui::Grid::new("horizontal-layout").show(ui, |ui| {
+        ui.label("左边缘");
+        ui.add(
+            egui::DragValue::new(&mut layout.left)
+                .range(0.0..=layout.right)
+                .suffix("%"),
+        );
+        ui.end_row();
+        ui.label("右边缘");
+        ui.add(
+            egui::DragValue::new(&mut layout.right)
+                .range(layout.left..=100.0)
+                .suffix("%"),
+        );
+        ui.end_row();
+    });
+    ui.label(
+        RichText::new("比例决定边缘跟随画布宽度变化的幅度。")
+            .small()
+            .color(MUTED),
+    );
+}
+
 fn property_label(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).size(11.0).color(MUTED));
 }
@@ -734,6 +806,39 @@ mod tests {
         let output = frame(&mut app, &ctx, vec![]);
         assert!(has_text(&output, "975 × Auto"));
         assert!(!has_text(&output, "高度"));
+    }
+
+    #[test]
+    fn responsive_page_and_widget_controls_are_editable_and_undoable() {
+        let mut project = Project::blank();
+        let id = project.allocate_id();
+        project.pages[0]
+            .widgets
+            .push(Widget::new(id, WidgetKind::Panel, 240.0, 20.0));
+        let mut app = fixture(project);
+        let ctx = egui::Context::default();
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_center(&output, "1280 × 800"));
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_center(&output, "响应式宽度"));
+        let output = frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.project.pages[0].canvas, CanvasMode::ResponsiveWidth);
+        assert!(has_text(&output, "设计宽度"));
+        assert!(has_text(&output, "最小宽度"));
+
+        app.selected.insert(id);
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_center(&output, "横向伸展"));
+        assert_eq!(
+            app.project.pages[0].widgets[0].horizontal_layout,
+            HorizontalLayout::STRETCH
+        );
+        app.undo();
+        assert_eq!(
+            app.project.pages[0].widgets[0].horizontal_layout,
+            HorizontalLayout::LEFT
+        );
+        assert_eq!(app.project.pages[0].canvas, CanvasMode::ResponsiveWidth);
     }
 
     #[test]

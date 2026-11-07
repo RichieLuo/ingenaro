@@ -157,6 +157,122 @@ fn mcp_initialize_list_ping_notifications_and_errors() {
 }
 
 #[test]
+fn reference_file_chunks_are_scoped_to_the_design_turn() {
+    use super::super::{ReferenceFile, reference_files::READ_TOOL};
+
+    let path = std::env::temp_dir().join(format!("{}.css", uuid::Uuid::new_v4()));
+    let source = "色".repeat(6000);
+    std::fs::write(&path, &source).unwrap();
+    let file = ReferenceFile::open(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    let (_host, client) = ToolHost::new();
+    let external = start(client.clone()).unwrap();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let design = start(
+        client
+            .scoped("design".into(), cancelled.clone())
+            .with_parallel_design()
+            .with_reference_files(vec![file]),
+    )
+    .unwrap();
+    let request = |arguments| json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":READ_TOOL,"arguments":arguments}});
+    let (_, response) = rpc(&external, request(json!({"file_id":1})));
+    assert_eq!(response.unwrap()["error"]["code"], -32602);
+    let call = |arguments| rpc(&design, request(arguments)).1.unwrap()["result"].clone();
+    assert_eq!(
+        call(json!({}))["structuredContent"]["files"],
+        json!([{"file_id":1,"name":path.file_name().unwrap().to_str().unwrap(),"bytes":source.len()}])
+    );
+    assert_eq!(call(json!({"path":path}))["isError"], true);
+    assert_eq!(call(json!({"file_id":1,"offset":1}))["isError"], true);
+    let first = call(json!({"file_id":1}));
+    let second = call(json!({"file_id":1,"offset":first["structuredContent"]["next_offset"]}));
+    assert_eq!(second["structuredContent"]["next_offset"], Value::Null);
+    assert_eq!(
+        [
+            first["structuredContent"]["text"].as_str().unwrap(),
+            second["structuredContent"]["text"].as_str().unwrap()
+        ]
+        .concat(),
+        source
+    );
+    cancelled.store(true, Ordering::Release);
+    assert_eq!(call(json!({"file_id":1}))["isError"], true);
+}
+
+#[test]
+fn user_path_allows_browsing_its_source_tree_without_exposing_other_paths() {
+    use super::super::reference_files::READ_TOOL;
+
+    let base = std::env::temp_dir().join(format!("rpshop references {}", uuid::Uuid::new_v4()));
+    let root = base.join("backend");
+    let nested = root.join("internal/web/static");
+    std::fs::create_dir_all(&nested).unwrap();
+    let source = nested.join("admin.css");
+    std::fs::write(&source, "body { color: green; }").unwrap();
+    let hidden = root.join(".env");
+    std::fs::write(&hidden, "private").unwrap();
+    let screenshot = root.join("screen.png");
+    image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255]))
+        .save(&screenshot)
+        .unwrap();
+    let outside = base.join("other.css");
+    std::fs::write(&outside, "outside").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, root.join("linked.css")).unwrap();
+    let root_path = root.to_str().unwrap();
+    let source_path = source.to_str().unwrap();
+    let (_host, client) = ToolHost::new();
+    let server = start(
+        client
+            .with_parallel_design()
+            .with_reference_prompt(&format!("参考 `{root_path}` 目录和 `{source_path}`")),
+    )
+    .unwrap();
+    let call = |args| {
+        rpc(
+            &server,
+            json!({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":READ_TOOL,"arguments":args}}),
+        )
+        .1
+        .unwrap()["result"]
+            .clone()
+    };
+    assert_eq!(call(json!({}))["structuredContent"]["files"], json!([]));
+    assert_eq!(
+        call(json!({"local_path":root_path}))["structuredContent"]["entries"],
+        json!([{"name":".env","directory":false},{"name":"internal","directory":true},{"name":"screen.png","directory":false}])
+    );
+    assert_eq!(
+        call(json!({"local_path":root_path,"path":"internal/web/static/admin.css"}))["structuredContent"]
+            ["text"],
+        "body { color: green; }"
+    );
+    assert_eq!(
+        call(json!({"local_path":source_path}))["structuredContent"]["text"],
+        "body { color: green; }"
+    );
+    assert_eq!(
+        call(json!({"local_path":root_path,"path":".env"}))["structuredContent"]["text"],
+        "private"
+    );
+    let image = call(json!({"local_path":root_path,"path":"screen.png"}));
+    assert_eq!(image["content"][1]["type"], "image");
+    assert_eq!(image["content"][1]["mimeType"], "image/png");
+    assert!(image["content"][1]["data"].as_str().unwrap().len() > 20);
+    assert!(image["structuredContent"].get("_rpshop_image").is_none());
+    for args in [
+        json!({"local_path":outside}),
+        json!({"local_path":root_path,"path":"../other.css"}),
+        json!({"local_path":root_path,"path":outside}),
+        json!({"local_path":root_path,"path":"linked.css"}),
+    ] {
+        assert_eq!(call(args)["isError"], true);
+    }
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+#[test]
 fn http_calls_forward_to_scoped_live_host_and_wrap_tool_errors() {
     let (host, client) = ToolHost::new();
     let client = client.scoped("generation-fixed".into(), Arc::new(AtomicBool::new(false)));

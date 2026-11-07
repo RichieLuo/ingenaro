@@ -101,6 +101,7 @@ impl App {
                                     |ui| {
                                         if ui.button("添加参考图片…").clicked(){self.ai_pick_images();ui.close();}
                                         if ui.button("粘贴剪贴板图片").clicked(){self.ai_paste_image();ui.close();}
+                                        if ui.button("添加参考文件…").on_hover_text("发送后，所选引擎可读取附带的 UTF-8 源码或文本").clicked(){self.ai_pick_reference_files();ui.close();}
                                         ui.separator();
                                         ui.label(RichText::new("引用设计上下文").strong());
                                         for (context, label) in [
@@ -121,7 +122,7 @@ impl App {
                                 )
                                 .response
                                 .on_hover_text(
-                                    "添加工程、页面或所选元件引用；上下文将发送给所选引擎",
+                                    "添加参考文件、图片或设计上下文。引用内容会交给所选引擎",
                                 );
                                 if self.ai.context != 3 || self.ai.references.selected.is_some() {
                                     ui.label(RichText::new("│").color(Color32::from_gray(202)));
@@ -196,8 +197,10 @@ impl App {
                     self.ai.context = context;
                 }
                 self.ai_images_strip(ui);
+                let file_height = self.ai_reference_files_height();
+                self.ai_reference_files_strip(ui);
                 let toolbar_height=toolbar::TOOLBAR_HEIGHT;
-                let height = (self.ai.composer_height - 36.0 - toolbar_height - 14.0 - self.ai_images_height()).max(32.0);
+                let height = (self.ai.composer_height - 36.0 - toolbar_height - 14.0 - self.ai_images_height() - file_height).max(32.0);
                 let was_focused = ui.memory(|memory| memory.has_focus(editor_id));
                 let composing = self.ai.ime_active;
                 let mut ime_commit = false;
@@ -315,7 +318,13 @@ impl App {
     }
 
     fn ai_composer_min_height(&self) -> f32 {
-        (36.0 + toolbar::TOOLBAR_HEIGHT + 14.0 + self.ai_images_height() + 32.0).max(150.0)
+        (36.0
+            + toolbar::TOOLBAR_HEIGHT
+            + 14.0
+            + self.ai_images_height()
+            + self.ai_reference_files_height()
+            + 32.0)
+            .max(150.0)
     }
 
     fn ai_reference_label(&self) -> (String, String) {

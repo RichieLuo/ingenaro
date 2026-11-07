@@ -133,9 +133,9 @@ impl App {
                 _ => None,
             })
             .unwrap_or(if interaction_example { 1 } else { 0 });
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         let logo = Some(crate::branding::title_texture(&cc.egui_ctx));
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         let logo = image::load_from_memory(include_bytes!("../../assets/branding/rpshop-icon.png"))
             .ok()
             .map(|img| {

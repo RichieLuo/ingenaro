@@ -19,6 +19,16 @@ impl NativeDocument {
             project.name == self.baseline.name,
             "原生项目名称来自文件名，请使用另存为更改文件名"
         );
+        ensure!(
+            project.pages.iter().all(|page| {
+                page.canvas != crate::model::CanvasMode::ResponsiveWidth
+                    && page.responsive_min_width.is_none()
+                    && page.widgets.iter().all(|widget| {
+                        widget.horizontal_layout == crate::model::HorizontalLayout::LEFT
+                    })
+            }),
+            "响应式布局设置仅支持 .rpshop 工程"
+        );
         let owners = owners(parts);
         let previous = self
             .baseline

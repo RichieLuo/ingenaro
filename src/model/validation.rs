@@ -74,6 +74,13 @@ pub(crate) fn validate_page(page: &Page) -> Result<()> {
         bounded(page.width, 64.0, 20_000.0) && bounded(page.height, 64.0, 20_000.0),
         "页面尺寸应在 64–20000 之间"
     );
+    ensure!(
+        page.responsive_min_width.is_none_or(|width| {
+            bounded(width, 64.0, 20_000.0)
+                && (page.canvas != CanvasMode::ResponsiveWidth || width <= page.width)
+        }),
+        "最小宽度应在 64–20000 之间，且在响应式页面中不能超过设计宽度"
+    );
     ensure!(valid_color(&page.background), "页面背景颜色无效");
     ensure!(page.widgets.len() <= 5_000, "单页最多包含 5000 个元件");
     let mut ids = HashSet::new();
@@ -108,6 +115,11 @@ pub(crate) fn validate_page(page: &Page) -> Result<()> {
         ensure!(
             bounded(widget.width, 1.0, 20_000.0) && bounded(widget.height, 1.0, 20_000.0),
             "元件尺寸应在 1–20000 之间"
+        );
+        let layout = widget.horizontal_layout;
+        ensure!(
+            bounded(layout.right, 0.0, 100.0) && bounded(layout.left, 0.0, layout.right),
+            "水平布局比例应在 0–100 之间，且左边缘比例不能大于右边缘"
         );
         ensure!(bounded(widget.font_size, 4.0, 512.0), "字号应在 4–512 之间");
         if let Some(layout) = &widget.text_layout {

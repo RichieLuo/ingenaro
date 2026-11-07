@@ -3,9 +3,13 @@ use super::*;
 use ai::SubagentState;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::collections::VecDeque;
 
 #[cfg(test)]
 mod tests;
+
+const LAUNCH_WAIT: Duration = Duration::from_secs(45);
+const LAUNCH_INCOMPLETE: &str = "尚未启动全部分组，请先启动其余分组，再等待子代理结果";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,8 +37,14 @@ impl Plan {
     fn read(arguments: &Value, project: &Project) -> Result<Self, String> {
         let plan = Self::deserialize(arguments)
             .map_err(|_| "需要 shared_brief 和 groups[{title,pages}]")?;
-        if !(1..=automation::MAX_PAGE_SUBAGENTS).contains(&plan.groups.len()) {
-            return Err("每组可分配 1–5 个页面子代理".into());
+        if !(automation::MIN_PAGE_SUBAGENTS..=automation::MAX_PAGE_SUBAGENTS)
+            .contains(&plan.groups.len())
+        {
+            return Err(format!(
+                "请把本轮可独立设计的页面一次分成 {}–{} 组；只有一组时由主会话直接完成",
+                automation::MIN_PAGE_SUBAGENTS,
+                automation::MAX_PAGE_SUBAGENTS,
+            ));
         }
         if plan.groups.iter().any(|group| {
             group.title.trim().is_empty()
@@ -81,6 +91,7 @@ pub(super) struct PageAgents {
     pub enabled: bool,
     targets: Vec<PageAssignment>,
     rows: Vec<AgentRow>,
+    waiting_edits: VecDeque<(Instant, automation::ToolRequest)>,
 }
 
 struct PageAssignment {
@@ -112,6 +123,9 @@ impl PageAgents {
     pub fn finish(&mut self) {
         self.enabled = false;
         self.targets.clear();
+        for (_, request) in self.waiting_edits.drain(..) {
+            let _ = request.reply.send(Err("本轮已结束，页面编辑未应用".into()));
+        }
         for row in &mut self.rows {
             if pending(row.state) {
                 row.state = SubagentState::Stopped;
@@ -137,6 +151,63 @@ impl PageAgents {
         self.targets.len()
     }
 
+    pub fn unstarted_count(&self) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| {
+                !self
+                    .rows
+                    .iter()
+                    .any(|row| row.pages == target.pages && row.state != SubagentState::Starting)
+            })
+            .count()
+    }
+
+    pub fn unfinished_count(&self) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| {
+                !self
+                    .rows
+                    .iter()
+                    .any(|row| row.pages == target.pages && row.state == SubagentState::Completed)
+            })
+            .count()
+    }
+
+    pub fn defer_edit(&mut self, request: automation::ToolRequest) {
+        self.waiting_edits
+            .push_back((Instant::now() + LAUNCH_WAIT, request));
+    }
+
+    pub fn take_ready_edit(&mut self) -> Option<automation::ToolRequest> {
+        self.waiting_edits.front()?;
+        let all_launched = self.unstarted_count() == 0;
+        while let Some((deadline, request)) = self.waiting_edits.front() {
+            let error = if request.is_cancelled() {
+                "工具请求已取消或超时"
+            } else if all_launched {
+                return self.waiting_edits.pop_front().map(|(_, request)| request);
+            } else if Instant::now() >= *deadline {
+                LAUNCH_INCOMPLETE
+            } else {
+                break;
+            };
+            if let Some((_, request)) = self.waiting_edits.pop_front() {
+                let _ = request.reply.send(Err(error.into()));
+            }
+        }
+        None
+    }
+
+    pub fn ensure_launched(&self) -> Result<(), String> {
+        if self.unstarted_count() == 0 {
+            Ok(())
+        } else {
+            Err(LAUNCH_INCOMPLETE.into())
+        }
+    }
+
     pub fn reserves_page_edits(&self) -> bool {
         self.enabled
             && (self.has_active()
@@ -149,12 +220,15 @@ impl PageAgents {
     }
 
     pub fn assigned(&self, id: u64) -> bool {
-        self.enabled
-            && self.targets.iter().any(|target| target.pages.contains(&id))
+        self.planned_page(id)
             && self
                 .rows
                 .iter()
                 .any(|row| row.pages.contains(&id) && pending(row.state))
+    }
+
+    pub fn planned_page(&self, id: u64) -> bool {
+        self.enabled && self.targets.iter().any(|target| target.pages.contains(&id))
     }
 
     pub fn record_edit(&mut self, id: u64) {
@@ -179,8 +253,8 @@ impl App {
         if !self.ai.page_agents.enabled || !request.is_some_and(|r| self.ai_builtin_request(r)) {
             return Err("只有当前原生设计会话可以分配页面子代理".into());
         }
-        if self.ai.page_agents.has_active() {
-            return Err("已有子代理在运行，请等本组完成".into());
+        if self.ai.page_agents.planned_count() > 0 {
+            return Err("本轮已有并行分工。请启动现有分工中的全部子代理并汇总结果；遗漏或依赖这些结果的页面由主会话补齐".into());
         }
         let plan = Plan::read(arguments, &self.project)?;
         let operations: Vec<_> = plan
@@ -207,7 +281,6 @@ impl App {
             .into_iter()
             .flatten()
             .filter_map(|result| result["page_id"].as_u64());
-        self.ai.page_agents.targets.clear();
         let palette = self.ai_palette_context();
         let assignments: Vec<_> = plan.groups.into_iter().map(|group| {
             let mut pages = Vec::new();
@@ -332,6 +405,7 @@ impl App {
             return;
         }
         let (active, total) = self.ai.page_agents.progress();
+        let total = total.max(self.ai.page_agents.planned_count());
         let label = if total == 0 {
             "子代理 0".into()
         } else {
@@ -387,6 +461,7 @@ impl App {
                     return;
                 }
                 egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
                     .max_height(236.0)
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 8.0;

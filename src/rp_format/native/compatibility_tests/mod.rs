@@ -62,6 +62,7 @@ fn order_fixture() -> (BTreeMap<u64, Graph>, Page, BTreeMap<u64, Binding>) {
         width: 1000.0,
         height: 1000.0,
         canvas: crate::model::CanvasMode::Fixed,
+        responsive_min_width: None,
         background: "#FFFFFF".into(),
         widgets: (1..=7)
             .map(|i| Widget::new(i, WidgetKind::Rectangle, 0.0, 0.0))

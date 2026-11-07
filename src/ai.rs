@@ -38,7 +38,7 @@ pub fn is_local_tool(name: &str) -> bool {
     crate::automation::is_design_tool(name)
 }
 
-pub const TOOL_PROTOCOL_REVISION: u32 = 7;
+pub const TOOL_PROTOCOL_REVISION: u32 = 9;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionBinding {

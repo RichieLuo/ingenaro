@@ -34,6 +34,44 @@ fn fixture() -> Project {
 }
 
 #[test]
+fn responsive_layout_round_trips_and_invalid_batches_are_atomic() {
+    let mut project = fixture();
+    let before = project.clone();
+    let operations = json!([
+        {"op":"update_page","properties":{"canvas":"ResponsiveWidth","width":1280,"responsive_min_width":960}},
+        {"op":"update_widget","widget_id":2,"properties":{"horizontal_layout":{"left":0,"right":100}}},
+        {"op":"update_widget","widget_id":3,"properties":{"horizontal_layout":{"left":50,"right":100}}}
+    ]);
+    let native_edit = call("rpshop_batch_edit", json!({"operations":operations}));
+    assert!(execute(&mut project, true, 0, &[], &native_edit).is_err());
+    assert_eq!(project, before);
+    batch(&mut project, operations).unwrap();
+
+    let path = std::env::temp_dir().join(format!("responsive-{}.rpshop", uuid::Uuid::new_v4()));
+    project.save(&path).unwrap();
+    let loaded = Project::load(&path);
+    std::fs::remove_file(path).unwrap();
+    assert_eq!(loaded.unwrap(), project);
+
+    let html = crate::export::html(&project).unwrap();
+    assert!(html.contains("\"responsive_min_width\":960.0"));
+    assert!(html.contains("left:calc(50% + -620px);top:40px;width:max(1px, calc(50% + -460px))"));
+    assert_eq!(
+        crate::export::svg(&project.pages[0]).unwrap(),
+        crate::export::svg(&before.pages[0]).unwrap()
+    );
+
+    let saved = project.clone();
+    for operations in [
+        json!([{"op":"update_page","properties":{"responsive_min_width":1300}}]),
+        json!([{"op":"update_widget","widget_id":2,"properties":{"horizontal_layout":{"left":90,"right":10}}}]),
+    ] {
+        assert!(batch(&mut project, operations).is_err());
+        assert_eq!(project, saved);
+    }
+}
+
+#[test]
 fn batch_validation_and_operation_failures_preserve_document_and_allocator() {
     let mut project = fixture();
     let before = project.clone();

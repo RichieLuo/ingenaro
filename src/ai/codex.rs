@@ -380,7 +380,7 @@ fn thread_params(job: &Job) -> Value {
         );
     } else if job.native_subagents() {
         params["developerInstructions"] = json!(
-            "Use RPShop tools for the live prototype. Delegate independent design work in this thread using native subagents when useful. Children use the rpshop_live MCP server and edit only assigned pages. Wait for the children and report their results in the parent conversation."
+            "Use RPShop tools for the live prototype. Put all independent page assignments in a single plan and spawn every assigned native subagent before calling wait. Do single-group and dependent work directly. Children use the rpshop_live MCP server and edit only assigned pages. Report their actual results in the parent conversation."
         );
     }
     if !job.request.config.model.is_empty() {
@@ -392,11 +392,35 @@ fn dynamic_tools(tools: Value) -> Value {
     Value::Array(tools.as_array().into_iter().flatten().map(|tool| json!({"type":"function","name":tool["name"],"description":tool["description"],"inputSchema":tool["inputSchema"]})).collect())
 }
 fn dynamic_result(result: Value, is_error: bool) -> Value {
-    json!({"contentItems":[{"type":"inputText","text":result.to_string()}],"success":!is_error})
+    if let Some(url) = result.get("_rpshop_image").and_then(Value::as_str) {
+        let mut metadata = result.clone();
+        metadata.as_object_mut().unwrap().remove("_rpshop_image");
+        json!({"contentItems":[{"type":"inputText","text":metadata.to_string()},{"type":"inputImage","imageUrl":url}],"success":!is_error})
+    } else {
+        json!({"contentItems":[{"type":"inputText","text":result.to_string()}],"success":!is_error})
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dynamic_reference_image_is_sent_as_image_content() {
+        let result = dynamic_result(
+            json!({"name":"screen.png","_rpshop_image":"data:image/png;base64,YWJj"}),
+            false,
+        );
+        assert_eq!(
+            result["contentItems"][1],
+            json!({"type":"inputImage","imageUrl":"data:image/png;base64,YWJj"})
+        );
+        assert!(
+            !result["contentItems"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("YWJj")
+        );
+    }
+
     #[test]
     fn schema_0147_dynamic_tools_have_required_type_and_input_schema() {
         let tools = dynamic_tools(crate::automation::tools());

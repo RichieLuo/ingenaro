@@ -20,6 +20,9 @@ mod browser_preview;
 
 mod interaction_editor;
 
+#[cfg(target_os = "macos")]
+mod titlebar;
+
 #[derive(Default)]
 struct MemoryStorage {
     values: HashMap<String, String>,

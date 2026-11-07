@@ -34,13 +34,13 @@ pub(super) fn definitions(job: &Job) -> Value {
     json!({
         "rpshop-coordinator": {
             "description":"Coordinates live page design in the current RPShop conversation.",
-            "prompt":"Design the open prototype using the RPShop tools. For parallel page work, prepare the page assignments and call the rpshop-page Agent once per assignment in the same response. Run the agents in the foreground and summarize their actual results. Keep all work within the current conversation.",
+            "prompt":"Design the open prototype using the RPShop tools. For independent pages, prepare one plan for the whole turn and call the rpshop-page Agent once per assignment in the same assistant message, with run_in_background set to true. Launch all groups before waiting and wait for every completion notification before replying. Do single-group and dependent work directly. Summarize the actual results in this conversation.",
             "model":"inherit", "tools":coordinator
         },
         PAGE_AGENT: {
             "description":"Designs the native RPShop pages assigned by the coordinator.",
             "prompt":"Work on the page IDs listed in your assignment. Read each page explicitly and edit it with rpshop_edit_assigned_page using its page_id. Apply complete batches of real editable widgets. Follow the shared design rules, leave other pages alone, and report what was applied.",
-            "model":"inherit", "tools":page_tools, "mcpServers":["rpshop"]
+            "model":"inherit", "background":true, "tools":page_tools, "mcpServers":["rpshop"]
         }
     })
 }
@@ -48,6 +48,7 @@ pub(super) fn definitions(job: &Job) -> Value {
 pub(super) fn allowed_call(name: &str, arguments: &Value) -> bool {
     matches!(name, "Agent" | "Task")
         && arguments["subagent_type"] == PAGE_AGENT
+        && arguments["run_in_background"] != false
         && arguments["isolation"].is_null()
         && arguments["team_name"].is_null()
 }
@@ -61,7 +62,6 @@ pub(super) struct Observer {
 struct Agent {
     page_id: Option<u64>,
     title: String,
-    background: bool,
     state: SubagentState,
 }
 
@@ -93,7 +93,6 @@ impl Observer {
                     let agent = Agent {
                         page_id,
                         title,
-                        background: input["run_in_background"] == true,
                         state: SubagentState::Starting,
                     };
                     agent.emit(job, id);
@@ -139,8 +138,6 @@ impl Observer {
                     }
                     if block["is_error"] == true {
                         self.update(job, id, SubagentState::Failed);
-                    } else if self.agents.get(id).is_some_and(|agent| !agent.background) {
-                        self.update(job, id, SubagentState::Completed);
                     }
                 }
             }

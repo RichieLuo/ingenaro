@@ -17,7 +17,7 @@ pub fn icon_data() -> IconData {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 pub fn title_texture(ctx: &eframe::egui::Context) -> eframe::egui::TextureHandle {
     let icon = icon_data();
     let image = eframe::egui::ColorImage::from_rgba_unmultiplied(

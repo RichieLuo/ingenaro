@@ -496,6 +496,13 @@ fn discard_input_echoes(frame: &mut Value) -> bool {
         let previous_len = content.len();
         content.retain(|block| block["type"] == "tool_result");
         discarded |= content.len() != previous_len;
+        for result in content.iter_mut() {
+            if let Some(blocks) = result.get_mut("content").and_then(Value::as_array_mut) {
+                let before = blocks.len();
+                blocks.retain(|block| block["type"] != "image");
+                discarded |= blocks.len() != before;
+            }
+        }
     }
     if matches!(
         frame["method"].as_str(),

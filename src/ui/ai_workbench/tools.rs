@@ -69,7 +69,12 @@ impl App {
             return;
         }
         for _ in 0..32 {
-            let Some(request) = self.ai.host.try_recv() else {
+            let Some(request) = self
+                .ai
+                .page_agents
+                .take_ready_edit()
+                .or_else(|| self.ai.host.try_recv())
+            else {
                 break;
             };
             if request.is_cancelled() || request.scope != self.ai_project_key() {
@@ -82,6 +87,18 @@ impl App {
                 let _ = request.reply.send(Err(
                     "工具参数包含受保护凭据，已阻止进入工程与版本记录".into()
                 ));
+                continue;
+            }
+            // An early MCP write must not block the remaining native launches or
+            // open an approval dialog before the whole plan has been launched.
+            if request.call.name == automation::EDIT_PAGE_TOOL
+                && self.ai.page_agents.unstarted_count() > 0
+                && self.ai_builtin_request(&request)
+                && request.call.arguments["page_id"]
+                    .as_u64()
+                    .is_some_and(|id| self.ai.page_agents.planned_page(id))
+            {
+                self.ai.page_agents.defer_edit(request);
                 continue;
             }
             let read = request.call.name.starts_with("rpshop_read_")
@@ -184,6 +201,7 @@ impl App {
                 {
                     return Err("此工具只能编辑当前会话分配的页面".into());
                 }
+                self.ai.page_agents.ensure_launched()?;
                 let edit = automation::ToolCall {
                     name: "rpshop_batch_edit".into(),
                     arguments: json!({"operations":call.arguments["operations"]}),

@@ -1,4 +1,4 @@
-use crate::model::{Action, Page, Project, Widget, WidgetKind, validate_page};
+use crate::model::{Action, HorizontalLayout, Page, Project, Widget, WidgetKind, validate_page};
 use anyhow::Result;
 use serde_json::json;
 use std::fmt::Write;
@@ -69,7 +69,12 @@ pub fn html_with_native(
         });
         if !native_page {
             for widget in &page.widgets {
-                write_html_widget(&mut output, widget, &format!("page-{}", page.id))?;
+                write_html_widget(
+                    &mut output,
+                    widget,
+                    &format!("page-{}", page.id),
+                    page.responsive_min_width().map(|_| page.width),
+                )?;
             }
         }
         output.push_str("</section>");
@@ -82,7 +87,13 @@ pub fn html_with_native(
         "page_tree": player_page_tree(project),
         "pages": ordered_pages.iter().map(|page| {
             let size=page.size_for_output();
-            json!({"id":page.id.to_string(),"key":page_keys.get(&page.id).cloned().unwrap_or_else(||format!("id-{}",page.id)),"name":page.name,"width":size[0],"height":size[1],"auto_width":page.canvas.auto_width(),"auto_height":page.canvas.auto_height()})
+            json!({
+                "id":page.id.to_string(),
+                "key":page_keys.get(&page.id).cloned().unwrap_or_else(||format!("id-{}",page.id)),
+                "name":page.name,"width":size[0],"height":size[1],
+                "auto_width":page.canvas.auto_width(),"auto_height":page.canvas.auto_height(),
+                "responsive_min_width":page.responsive_min_width()
+            })
         }).collect::<Vec<_>>(),
         "interactions": project.pages.iter().flat_map(|page| &page.widgets).filter(|widget| widget.interaction.action != Action::None).map(|widget| json!({
             "id":widget.id.to_string(), "action":widget.interaction.action,
@@ -130,7 +141,7 @@ fn prepare_native_visuals(value: &mut serde_json::Value) -> Result<()> {
                     widget.hidden = false;
                     widget.interaction = Default::default();
                     let mut html = String::new();
-                    write_html_widget(&mut html, &widget, "native")?;
+                    write_html_widget(&mut html, &widget, "native", None)?;
                     // Runtime instances are scoped per frame/master. Numeric
                     // editor IDs must never become duplicate document IDs.
                     html = html.replacen(&format!(" id=\"w-{}\"", widget.id), "", 1);
@@ -200,7 +211,12 @@ fn player_page_tree(project: &Project) -> Vec<serde_json::Value> {
     }
 }
 
-fn write_html_widget(output: &mut String, widget: &Widget, scope: &str) -> Result<()> {
+fn write_html_widget(
+    output: &mut String,
+    widget: &Widget,
+    scope: &str,
+    responsive_width: Option<f32>,
+) -> Result<()> {
     let class = kind_class(widget.kind);
     let radio_group = match widget.radio_group.as_deref() {
         Some("") => format!("widget-{}", widget.id),
@@ -231,9 +247,25 @@ fn write_html_widget(output: &mut String, widget: &Widget, scope: &str) -> Resul
             layout.padding[1], layout.padding[2], layout.padding[3], layout.padding[0],
             if layout.bold {700} else {400}, if layout.wrap {"pre-wrap"} else {"pre"}, if layout.wrap {"hidden"} else {"visible"})
     });
+    let (left, width) = if let Some(design_width) = responsive_width
+        && widget.horizontal_layout != HorizontalLayout::LEFT
+    {
+        let start = f64::from(widget.horizontal_layout.left);
+        let span = f64::from(widget.horizontal_layout.right) - start;
+        let design_width = f64::from(design_width);
+        // Each edge follows a share of the delta from the design width.
+        let x_offset = f64::from(widget.x) - design_width * start / 100.0;
+        let width_offset = f64::from(widget.width) - design_width * span / 100.0;
+        (
+            format!("calc({start}% + {x_offset}px)"),
+            format!("max(1px, calc({span}% + {width_offset}px))"),
+        )
+    } else {
+        (format!("{}px", widget.x), format!("{}px", widget.width))
+    };
     write!(
         output,
-        "<div id=\"w-{}\" class=\"widget {}{}\" data-interactive=\"{}\" aria-label=\"{}\" style=\"left:{}px;top:{}px;width:{}px;height:{}px;background:{};border:1px solid {};border-radius:{};color:{};font-size:{}px;opacity:{};transform:rotate({}deg);transform-origin:center center{}\"{}{}>",
+        "<div id=\"w-{}\" class=\"widget {}{}\" data-interactive=\"{}\" aria-label=\"{}\" style=\"left:{left};top:{}px;width:{width};height:{}px;background:{};border:1px solid {};border-radius:{};color:{};font-size:{}px;opacity:{};transform:rotate({}deg);transform-origin:center center{}\"{}{}>",
         widget.id,
         class,
         if widget.kind == WidgetKind::Image && widget.image_data.is_none() {
@@ -243,9 +275,7 @@ fn write_html_widget(output: &mut String, widget: &Widget, scope: &str) -> Resul
         },
         interactive,
         escape_html(&widget.name),
-        widget.x,
         widget.y,
-        widget.width,
         widget.height,
         fill,
         if vector.is_some() {

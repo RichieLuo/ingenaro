@@ -1,4 +1,4 @@
-//! User-authored follow-ups: FIFO, explicit pause/cancel, context+images captured per submission.
+//! User-authored follow-ups: FIFO, explicit pause/cancel, context and attachments captured per submission.
 use super::*;
 use std::collections::VecDeque;
 #[cfg(test)]
@@ -18,6 +18,18 @@ pub(super) struct Submission {
     pub context_mode: usize,
     pub read_only: bool,
     pub images: Vec<ai::ImageAttachment>,
+    pub reference_files: Vec<automation::ReferenceFile>,
+}
+impl Submission {
+    fn context_bytes(&self) -> usize {
+        serde_json::to_vec(&self.context).map_or(usize::MAX / 32, |bytes| bytes.len())
+            + self.prompt.len()
+            + self
+                .reference_files
+                .iter()
+                .map(automation::ReferenceFile::byte_len)
+                .sum::<usize>()
+    }
 }
 #[derive(Default)]
 pub(super) struct MessageQueue {
@@ -36,21 +48,12 @@ impl MessageQueue {
         if self.entries.len() >= 16 {
             return Err("队列已达 16 条，请等待或移除已有需求".into());
         }
-        let bytes = serde_json::to_vec(&submission.context)
-            .map_err(|_| "无法编码队列引用")?
-            .len()
-            + submission.prompt.len();
         let queued = self
             .entries
             .iter()
-            .map(|entry| {
-                serde_json::to_vec(&entry.context)
-                    .map(|bytes| bytes.len())
-                    .unwrap_or(usize::MAX / 32)
-                    + entry.prompt.len()
-            })
+            .map(Submission::context_bytes)
             .sum::<usize>();
-        if bytes.saturating_add(queued) > 16 * 1024 * 1024 {
+        if submission.context_bytes().saturating_add(queued) > 16 * 1024 * 1024 {
             return Err("队列引用累计超过 16 MiB，请先处理已有需求".into());
         }
         let total = self
@@ -144,6 +147,9 @@ impl App {
         if self.ai_image_loading() {
             return Err("图片仍在读取，完成后再发送，避免遗漏附件".into());
         }
+        if self.ai.reference_files.loading() {
+            return Err("参考文件仍在读取，完成后再发送".into());
+        }
         ai::validate_image_attachments(&self.ai.images).map_err(|error| error.to_string())?;
         if self.ai.prompt.len() > 128 * 1024 {
             return Err("单条需求超过 128 KiB，请缩短后发送".into());
@@ -154,7 +160,7 @@ impl App {
             self.ai.prompt.clone()
         };
         if prompt.trim().is_empty() {
-            return Err("请先输入需求或添加图片".into());
+            return Err("请先输入需求或添加图片。使用参考文件时请说明设计需求".into());
         }
         let context = self.ai_reference_context();
         let context_bytes = serde_json::to_vec(&context)
@@ -178,6 +184,7 @@ impl App {
             },
             read_only: self.ai.discuss_only,
             images: self.ai.images.clone(),
+            reference_files: self.ai.reference_files.files.clone(),
         })
     }
     pub(super) fn ai_submit(&mut self) {
@@ -209,6 +216,7 @@ impl App {
                 Ok(_) => {
                     self.ai.prompt.clear();
                     self.ai.images.clear();
+                    self.ai.reference_files.files.clear();
                     self.ai.state = format!("已加入队列 · {} 条待执行", self.ai.queue.len());
                 }
                 Err(error) => self.ai.state = error,
@@ -216,10 +224,12 @@ impl App {
         } else if self.ai_begin(submission) {
             self.ai.prompt.clear();
             self.ai.images.clear();
+            self.ai.reference_files.files.clear();
         }
     }
     pub(super) fn ai_poll_queue(&mut self) {
         if self.ai.running.is_some()
+            || self.ai.steering.is_some()
             || self.ai.queue.paused
             || self.confirm.is_some()
             || self.ai_modal_active()
@@ -260,6 +270,8 @@ impl App {
         if !self.ai.prompt.trim().is_empty()
             || !self.ai.images.is_empty()
             || self.ai_image_loading()
+            || !self.ai.reference_files.files.is_empty()
+            || self.ai.reference_files.loading()
         {
             self.ai.state = "请先发送或清空当前草稿，再编辑待发送消息".into();
             return;
@@ -283,6 +295,7 @@ impl App {
         self.ai.queue.remove(id);
         self.ai.prompt = entry.prompt;
         self.ai.images = entry.images;
+        self.ai.reference_files.files = entry.reference_files;
         // Editing deliberately recaptures references on the next send, rather than
         // silently keeping an invisible old selection snapshot.
         self.ai.state = "已恢复到输入框 · 再次发送时使用当前引用、模型和权限".into();
@@ -295,10 +308,10 @@ impl App {
         // The chat panel already reserved ai_queue_height() above the composer.
         // Reserve only the remaining footer/header spacing here, not a second
         // conversation-sized block that clips every pending row to zero height.
-        let list_height = (self.ai.queue.len().min(3) as f32 * 30.0)
-            .min((ui.available_height() - self.ai.composer_height - 100.0).max(0.0));
+        let list_height = self.ai.queue.len().min(3) as f32 * 30.0;
         let mut remove = None;
         let mut edit = None;
+        let mut steer = None;
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 3.0);
             ui.spacing_mut().interact_size.y = 22.0;
@@ -340,7 +353,7 @@ impl App {
                                                 .size(10.0)
                                                 .color(MUTED),
                                         );
-                                        let width = (ui.available_width() - 61.0).max(20.0);
+                                        let width = (ui.available_width() - 128.0).max(20.0);
                                         ui.add_sized(
                                             [width, 20.0],
                                             egui::Label::new(
@@ -356,8 +369,19 @@ impl App {
                                                 item.images.len()
                                             ),
                                         );
+                                        let response = ui.add_enabled(
+                                            self.ai.running.is_some()
+                                                && self.ai.steering.is_none()
+                                                && !self.ai.page_agents.has_active()
+                                                && item.reference_files.is_empty(),
+                                            egui::Button::new(RichText::new("引导对话").size(10.0)).frame(false),
+                                        ).on_hover_text("立即将这条消息发送给当前任务；引擎确认后从队列移除");
+                                        #[cfg(test)]
+                                        ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new(("ai-queue-steer", item.id)), response.rect));
+                                        if response.clicked() { steer = Some(item.id); }
                                         let response = ui
-                                            .add(
+                                            .add_enabled(
+                                                self.ai.steering.is_none(),
                                                 egui::Button::new(RichText::new("✎").color(MUTED))
                                                     .frame(false),
                                             )
@@ -373,7 +397,8 @@ impl App {
                                             edit = Some(item.id);
                                         }
                                         let response = ui
-                                            .add(
+                                            .add_enabled(
+                                                self.ai.steering.is_none(),
                                                 egui::Button::new(RichText::new("×").color(MUTED))
                                                     .frame(false),
                                             )
@@ -394,6 +419,9 @@ impl App {
                     }
                 });
         });
+        if let Some(id) = steer {
+            self.ai_steer_queued(id);
+        }
         if let Some(id) = remove {
             self.ai.queue.remove(id);
         }

@@ -275,6 +275,7 @@ impl App {
         } = self.clipboard.clone();
         let mut remap = HashMap::new();
         let mut next_id = self.project.next_id;
+        let mut dropped_layout = false;
         for w in &mut widgets {
             let id = next_id;
             let Some(next) = next_id.checked_add(1).filter(|next| *next < u64::MAX) else {
@@ -286,6 +287,10 @@ impl App {
             w.id = id;
             w.x += 24.0;
             w.y += 24.0;
+            if self.native.is_some() && w.horizontal_layout != Default::default() {
+                w.horizontal_layout = Default::default();
+                dropped_layout = true;
+            }
             if w.name.len() + " 副本".len() <= 1024 {
                 w.name.push_str(" 副本");
             }
@@ -322,5 +327,8 @@ impl App {
         let page_id = page.id;
         self.project
             .duplicate_interaction_events(page_id, &remap.into_iter().collect());
+        if dropped_layout {
+            self.status = "已按固定尺寸粘贴，响应式布局仅支持 RPShop 工程".into();
+        }
     }
 }

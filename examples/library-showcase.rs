@@ -30,6 +30,7 @@ fn main() -> Result<()> {
             width: 1280.0,
             height: min_height,
             canvas: Default::default(),
+            responsive_min_width: None,
             background: "#FFFFFF".into(),
             widgets: Vec::new(),
             group_names: Default::default(),

@@ -358,3 +358,28 @@ fn compact_pending_message_remove_control_retracts_only_that_message() {
     assert_eq!(app.ai.queue.len(), 1);
     assert_eq!(app.ai.queue.entries().next().unwrap().prompt, "保留这条");
 }
+
+#[test]
+fn single_pending_message_has_visible_controls() {
+    let mut app = configured();
+    let entry = capture(&mut app, "唯一的待发送消息");
+    let id = app.ai.queue.push(entry).unwrap();
+    app.ai.queue.paused = true;
+    let ctx = egui::Context::default();
+    crate::ui::setup_style(&ctx);
+    for _ in 0..3 {
+        frame(&mut app, &ctx, vec![]);
+    }
+    let rect = ctx
+        .data(|data| data.get_temp::<Rect>(egui::Id::new(("ai-queue-steer", id))))
+        .unwrap();
+    let panel = ctx
+        .data(|data| data.get_temp::<Rect>(egui::Id::new("ai-chat-panel-test")))
+        .unwrap();
+    assert!(rect.height() > 0.0 && panel.contains(rect.center()));
+    let remove = ctx
+        .data(|data| data.get_temp::<Rect>(egui::Id::new(("ai-queue-remove", id))))
+        .unwrap();
+    crate::ui::tests::click(&mut app, &ctx, remove.center());
+    assert_eq!(app.ai.queue.len(), 0);
+}

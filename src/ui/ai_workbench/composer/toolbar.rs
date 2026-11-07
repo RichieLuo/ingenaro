@@ -150,12 +150,13 @@ impl App {
                 if running && ready {
                     egui::Popup::menu(&response).show(|ui| {
                         ui.set_max_width(230.0);
-                        if ui.button("排队发送").on_hover_text("保留当前引用与图片，当前任务完成后发送").clicked() {
+                        if ui.button("排队发送").on_hover_text("保留当前引用和附件，当前任务完成后发送").clicked() {
                             send = true;
                             ui.close();
                         }
-                        if ui.add_enabled(self.ai.steering.is_none() && !self.ai.page_agents.has_active(), egui::Button::new("引导当前对话"))
-                            .on_hover_text("将补充要求和图片交给正在运行的同一任务，不停止、不排队；权限边界保持不变。")
+                        let has_files = !self.ai.reference_files.files.is_empty() || self.ai.reference_files.loading();
+                        if ui.add_enabled(!has_files && self.ai.steering.is_none() && !self.ai.page_agents.has_active(), egui::Button::new("引导当前对话"))
+                            .on_hover_text("将补充要求和图片交给正在运行的任务。附带参考文件时请使用排队发送。")
                             .clicked() {
                             self.ai_steer();
                             ui.close();

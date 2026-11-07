@@ -493,12 +493,18 @@ impl Job {
             }
             Err(_) => (json!({"error":"RPShop tool failed or was denied"}), true),
         };
-        if serde_json::to_vec(&value).map_or(true, |v| v.len() > super::process::MAX_FRAME / 2) {
+        if serde_json::to_vec(&value)
+            .map_or(true, |v| v.len() > super::process::MAX_INPUT_FRAME / 2)
+        {
             return Err("RPShop tool result exceeded the size limit".into());
+        }
+        let mut public_value = value.clone();
+        if let Some(object) = public_value.as_object_mut() {
+            object.remove("_rpshop_image");
         }
         self.emit(AiEvent::ToolResult {
             id,
-            result: value.clone(),
+            result: public_value,
             is_error,
         });
         Ok((value, is_error))

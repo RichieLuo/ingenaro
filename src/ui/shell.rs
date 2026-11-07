@@ -1,28 +1,88 @@
 use super::*;
 
+#[cfg(not(target_os = "windows"))]
+fn titlebar_drag_response(response: &egui::Response) {
+    let ctx = &response.ctx;
+    if response.double_clicked() {
+        let maximized = ctx.input(|input| input.viewport().maximized.unwrap_or(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+    } else if response.is_pointer_button_down_on()
+        && ctx.input(|input| input.pointer.button_pressed(egui::PointerButton::Primary))
+    {
+        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+}
+
 impl App {
     pub(super) fn header(&mut self, ctx: &egui::Context) {
         #[cfg(target_os = "windows")]
         self.windows_title_bar(ctx);
         #[cfg(not(target_os = "windows"))]
-        egui::TopBottomPanel::top("header")
-            .frame(
+        {
+            let macos = cfg!(target_os = "macos");
+            let mut header = egui::TopBottomPanel::top("header").frame(
                 egui::Frame::new()
-                    .fill(Color32::WHITE)
-                    .inner_margin(egui::Margin::symmetric(18, 10)),
-            )
-            .show(ctx, |ui| {
+                    .fill(if macos {
+                        Color32::from_rgb(250, 251, 252)
+                    } else {
+                        Color32::WHITE
+                    })
+                    .inner_margin(if macos {
+                        egui::Margin::ZERO
+                    } else {
+                        egui::Margin::symmetric(18, 10)
+                    }),
+            );
+            if macos {
+                header = header.exact_height(44.0);
+            }
+            header.show(ctx, |ui| {
                 if self.confirm.is_some() || self.editing.is_some() {
                     ui.disable();
                 }
+                if macos {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                }
                 ui.horizontal(|ui| {
-                    if let Some(logo) = &self.logo {
-                        ui.image((logo.id(), vec2(38.0, 38.0)));
+                    if macos {
+                        ui.set_height(44.0);
+                        // AppKit draws the native traffic lights over this content.
+                        ui.add_space(78.0);
+                        let brand = ui.allocate_ui_with_layout(
+                            vec2(160.0, 44.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.add_space(16.0);
+                                if let Some(logo) = &self.logo {
+                                    ui.add(
+                                        egui::Image::new((logo.id(), vec2(28.0, 28.0)))
+                                            .alt_text("RPShop 猫头鹰 Logo"),
+                                    );
+                                }
+                                ui.add_space(8.0);
+                                ui.label(
+                                    RichText::new("RPShop")
+                                        .size(18.0)
+                                        .strong()
+                                        .color(Color32::from_rgb(30, 40, 48)),
+                                );
+                            },
+                        );
+                        let response = ui.interact(
+                            brand.response.rect,
+                            ui.id().with("title-brand-drag"),
+                            Sense::click_and_drag(),
+                        );
+                        titlebar_drag_response(&response);
+                    } else {
+                        if let Some(logo) = &self.logo {
+                            ui.image((logo.id(), vec2(38.0, 38.0)));
+                        }
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("rpshop").size(22.0).strong().color(INK));
+                            ui.label(RichText::new("PROTOTYPE STUDIO").size(9.0).color(MUTED));
+                        });
                     }
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new("rpshop").size(22.0).strong().color(INK));
-                        ui.label(RichText::new("PROTOTYPE STUDIO").size(9.0).color(MUTED));
-                    });
                     ui.add_space(24.0);
                     ui.label(
                         RichText::new("● 工作空间")
@@ -30,6 +90,10 @@ impl App {
                             .size(12.0),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if macos {
+                            ui.spacing_mut().item_spacing.x = 7.0;
+                            ui.add_space(18.0);
+                        }
                         if ui
                             .add(
                                 egui::Button::new(
@@ -62,9 +126,15 @@ impl App {
                             egui::Label::new(RichText::new(&self.project.name).strong()).truncate(),
                         )
                         .on_hover_text(&self.project.name);
+                        if macos {
+                            let response =
+                                ui.allocate_response(ui.available_size(), Sense::click_and_drag());
+                            titlebar_drag_response(&response);
+                        }
                     });
                 });
             });
+        }
         egui::TopBottomPanel::top("toolbar")
             .frame(
                 egui::Frame::new()
@@ -273,6 +343,7 @@ impl App {
                         width: 1280.0,
                         height: 800.0,
                         canvas: rpshop::model::CanvasMode::Fixed,
+                        responsive_min_width: None,
                         background: "#FFFFFF".into(),
                         widgets: vec![],
                         group_names: Default::default(),

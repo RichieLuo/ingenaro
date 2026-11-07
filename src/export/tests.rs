@@ -72,12 +72,12 @@ fn native_radio_groups_keep_source_names_and_ungrouped_inputs_independent() {
     widget.name = "visible component name".into();
     widget.radio_group = Some("source \"group\"".into());
     let mut output = String::new();
-    write_html_widget(&mut output, &widget, "page-1").unwrap();
+    write_html_widget(&mut output, &widget, "page-1", None).unwrap();
     assert!(output.contains("name=\"page-1:source &quot;group&quot;\""));
     assert!(output.contains("aria-label=\"visible component name\""));
     widget.radio_group = Some(String::new());
     output.clear();
-    write_html_widget(&mut output, &widget, "page-1").unwrap();
+    write_html_widget(&mut output, &widget, "page-1", None).unwrap();
     assert!(output.contains("name=\"page-1:widget-17\""));
 }
 

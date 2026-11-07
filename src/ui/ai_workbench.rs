@@ -24,6 +24,7 @@ mod permissions_tests;
 mod progress;
 mod qa;
 mod queue;
+mod reference_files;
 mod references;
 mod settings;
 mod steering;
@@ -80,6 +81,7 @@ pub(super) struct Workbench {
     queue: queue::MessageQueue,
     images: Vec<ai::ImageAttachment>,
     image_draft: images::ImageDraft,
+    reference_files: reference_files::Draft,
     palette: palette::PaletteEditor,
     prompt_editor_id: Option<egui::Id>,
     composer_height: f32,
@@ -198,6 +200,7 @@ impl Workbench {
             queue: Default::default(),
             images: Vec::new(),
             image_draft: Default::default(),
+            reference_files: Default::default(),
             palette: Default::default(),
             prompt_editor_id: None,
             composer_height: 222.0,
@@ -280,6 +283,7 @@ impl Workbench {
         self.queue.clear();
         self.images.clear();
         self.image_draft = Default::default();
+        self.reference_files = Default::default();
         self.references.clear();
         self.page_activity.clear();
         self.reasoning.clear();
@@ -400,6 +404,7 @@ impl App {
         }
         self.ai_poll_discovery();
         self.ai_poll_images();
+        self.ai_poll_reference_files();
         self.ai_poll_palette(ctx);
         self.poll_ai_events();
         self.poll_ai_tools(ctx);
@@ -410,6 +415,7 @@ impl App {
         }
         if self.ai.running.is_some()
             || self.ai_image_loading()
+            || self.ai.reference_files.loading()
             || self.ai.server.is_some()
             || self.ai.local_scan.is_some()
             || !self.ai.diagnostics_jobs.is_empty()
