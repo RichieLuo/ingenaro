@@ -56,6 +56,7 @@ pub(super) fn fixture(project: Project) -> App {
         clipboard: Default::default(),
         expanded_layer_groups: BTreeSet::new(),
         layer_name_dialog: None,
+        page_folder_dialog: None,
         zoom: 0.5,
         view: CanvasView::default(),
         sidebar_layout: sidebar::SidebarLayout::default(),

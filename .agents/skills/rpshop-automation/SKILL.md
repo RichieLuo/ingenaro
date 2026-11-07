@@ -1,0 +1,35 @@
+---
+name: rpshop-automation
+description: Inspect or edit a live RPShop prototype with RPShop tools. Use for project files, pages and folders, widgets, styles, interactions, editor history, preview, or export.
+---
+
+# RPShop live editing
+
+In RPShop's AI Design menu, open **外部 API / MCP** and enable MCP for the current project. Use **复制 MCP 配置（含临时密钥）** to configure an external client. Keep the temporary bearer token in the client configuration. Built-in AI receives the tools directly.
+
+1. Discover the available tools with MCP `tools/list` or the host's supplied definitions. Call `rpshop_capabilities` to check format, write limits and scope. Use the live tools for document work and the host dialogs for opening, saving and exporting files.
+2. Read the relevant live state with `rpshop_read_pages`, `rpshop_read_layers`, `rpshop_read_widgets`, `rpshop_read_styles`, or `rpshop_read_interactions`. Page and widget IDs are positive numbers. Folder IDs are strings. An empty `page_tree` means that all pages are at the root.
+3. Use `rpshop_batch_edit` for atomic document edits. A failed operation rolls back the batch. Use explicit page IDs for multi-page work. Search `rpshop_read_library` before creating a preset with `create_library_item`. Read the live state again to verify the result, and report only confirmed edits.
+
+## Organize the page directory
+
+Check `page_folders.editable` in capabilities. In `.rpshop`, create folders with `create_page_folder`. Provide a unique `folder_id` to reference a folder in the same batch, or use the returned ID in the next call. Set `parent_folder_id` for a subfolder. Use `move_page` for an existing page and `create_page` with `folder_id` for a new page inside a folder. Root destinations use null or omit the destination field. Use `rename_page_folder`, `move_page_folder`, and `delete_page_folder` to manage folders. Deletion promotes children to the parent level and preserves the pages. For native RP files, the folder tree is readable and can be edited after saving as `.rpshop`.
+
+This `rpshop_batch_edit` call groups page 1 with a new settings page. Confirm that page 1 exists before calling.
+
+```json
+{"operations":[
+  {"op":"create_page_folder","folder_id":"account","name":"账户"},
+  {"op":"move_page","page_id":1,"folder_id":"account"},
+  {"op":"create_page","name":"账户设置","folder_id":"account"}
+]}
+```
+
+Page-local workers edit the assigned page. The coordinating session handles directory changes.
+
+## Use the live editor
+
+- Use `rpshop_edit_widgets` for alignment, distribution, quarter-turn rotation, reflection and duplication. Pass explicit `widget_ids` and use the returned IDs for duplicates. Set `target_page_id` on `duplicate` to copy to another page.
+- Use `rpshop_read_view` and `rpshop_set_view` for selection and the viewport. Use `rpshop_history` when the user requests undo or redo. The editor maintains the shared history.
+- Use `rpshop_open_project` or `rpshop_new_project` when the user requests a project switch. The host handles unsaved changes. Start a new turn after a successful switch.
+- Use `rpshop_preview`, `rpshop_save`, `rpshop_export`, and `rpshop_publish_html` according to the requested deliverable. Respect tool approvals and report any cancelled or pending dialog as such.

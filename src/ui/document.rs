@@ -192,6 +192,7 @@ impl App {
                     self.pending_widget = None;
                     self.expanded_layer_groups.clear();
                     self.layer_name_dialog = None;
+                    self.page_folder_dialog = None;
                     self.undo.clear();
                     self.redo.clear();
                     self.textures.clear();

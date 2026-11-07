@@ -328,42 +328,43 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new("页面").strong().size(14.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let editable = self.native.is_none();
                 if ui
-                    .add_enabled(self.native.is_none(), egui::Button::new("＋").small())
+                    .add_enabled(editable, egui::Button::new("＋").small())
                     .on_hover_text("新建页面")
                     .on_disabled_hover_text(
                         "当前 RP 原生编辑支持修改已有页面和组件，暂不支持新增页面",
                     )
                     .clicked()
                 {
-                    let id = self.project.allocate_id();
-                    self.project.pages.push(Page {
-                        id,
-                        name: format!("页面 {}", self.project.pages.len() + 1),
-                        width: 1280.0,
-                        height: 800.0,
-                        canvas: rpshop::model::CanvasMode::Fixed,
-                        responsive_min_width: None,
-                        background: "#FFFFFF".into(),
-                        widgets: vec![],
-                        group_names: Default::default(),
-                    });
-                    if !self.project.page_tree.is_empty() {
-                        self.project
-                            .page_tree
-                            .push(rpshop::model::PageTreeNode::Page {
-                                page_id: id,
-                                children: Vec::new(),
-                            });
+                    let name = format!("页面 {}", self.project.pages.len() + 1);
+                    if let Err(error) =
+                        self.edit_page_tree(serde_json::json!({"op":"create_page","name":name}))
+                    {
+                        self.status = error;
                     }
-                    self.page = self.project.pages.len() - 1;
-                    self.selected.clear();
-                    self.fit = true;
+                }
+                if ui
+                    .add_enabled(editable, egui::Button::new("新建文件夹").small())
+                    .on_disabled_hover_text(
+                        "原生 RP 文件可保留和浏览目录。另存为 .rpshop 后可编辑目录。",
+                    )
+                    .clicked()
+                {
+                    self.page_folder_dialog = Some(page_tree::FolderNameDialog::create(None));
                 }
             });
         });
         ui.add_space(9.0);
         let navigation = page_tree::show(ui, &self.project, self.page, self.native.is_none());
+        if let Some(dialog) = navigation.name_dialog {
+            self.page_folder_dialog = Some(dialog);
+        }
+        if let Some(operation) = navigation.edit
+            && let Err(error) = self.edit_page_tree(operation)
+        {
+            self.status = error;
+        }
         if let Some(i) = navigation.activate {
             self.page = i;
             self.selected.clear();

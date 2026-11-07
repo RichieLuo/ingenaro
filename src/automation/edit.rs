@@ -6,6 +6,8 @@ use serde_json::{Value, json};
 
 use crate::{grouping, model::*, selection::LayerMove};
 
+mod page_tree;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Batch {
@@ -26,6 +28,7 @@ enum Operation {
         background: Option<String>,
         canvas: Option<CanvasMode>,
         responsive_min_width: Option<f32>,
+        folder_id: Option<String>,
     },
     UpdatePage {
         page_id: Option<u64>,
@@ -36,6 +39,26 @@ enum Operation {
     },
     ReorderPages {
         page_ids: Vec<u64>,
+    },
+    CreatePageFolder {
+        folder_id: Option<String>,
+        name: String,
+        parent_folder_id: Option<String>,
+    },
+    RenamePageFolder {
+        folder_id: String,
+        name: String,
+    },
+    DeletePageFolder {
+        folder_id: String,
+    },
+    MovePageFolder {
+        folder_id: String,
+        parent_folder_id: Option<String>,
+    },
+    MovePage {
+        page_id: u64,
+        folder_id: Option<String>,
     },
     CreateWidget {
         page_id: Option<u64>,
@@ -195,7 +218,12 @@ fn require_page_scope(project: &Project, assigned: u64, operation: &Operation) -
         Operation::UpdateProject { .. }
         | Operation::CreatePage { .. }
         | Operation::DeletePage { .. }
-        | Operation::ReorderPages { .. } => bail!("Page workers cannot change project structure"),
+        | Operation::ReorderPages { .. }
+        | Operation::CreatePageFolder { .. }
+        | Operation::RenamePageFolder { .. }
+        | Operation::DeletePageFolder { .. }
+        | Operation::MovePageFolder { .. }
+        | Operation::MovePage { .. } => bail!("Page workers cannot change project structure"),
     };
     ensure!(
         page_id.is_none_or(|id| id == assigned),
@@ -213,6 +241,13 @@ fn native_preflight(operation: &Operation) -> Result<()> {
         | Operation::DeletePage { .. }
         | Operation::ReorderPages { .. } => {
             bail!("Native documents do not support creating, deleting or reordering pages")
+        }
+        Operation::CreatePageFolder { .. }
+        | Operation::RenamePageFolder { .. }
+        | Operation::DeletePageFolder { .. }
+        | Operation::MovePageFolder { .. }
+        | Operation::MovePage { .. } => {
+            bail!("原生 RP 文件暂不支持修改页面文件夹结构；请另存为 .rpshop 后操作")
         }
         Operation::UpdatePage { properties, .. } => {
             super::fields(properties, &["name", "background"]).map_err(anyhow::Error::msg)?;
@@ -370,6 +405,7 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
             background,
             canvas,
             responsive_min_width,
+            folder_id,
         } => {
             let id = allocate(project, id)?;
             ensure!(project.pages.len() < 128, "Page count exceeds 128");
@@ -384,12 +420,7 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
                 widgets: Vec::new(),
                 group_names: Default::default(),
             });
-            if !project.page_tree.is_empty() {
-                project.page_tree.push(PageTreeNode::Page {
-                    page_id: id,
-                    children: Vec::new(),
-                });
-            }
+            page_tree::append_page(&mut project.page_tree, id, folder_id.as_deref())?;
             Ok(json!({"op":"create_page","page_id":id}))
         }
         Operation::UpdatePage {
@@ -404,14 +435,16 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
             ensure!(project.pages.len() > 1, "Cannot delete the last page");
             let index = page_index(project, default_page, Some(page_id))?;
             project.pages.remove(index);
-            remove_tree_page(&mut project.page_tree, page_id);
+            page_tree::remove_entry(&mut project.page_tree, page_tree::Entry::Page(page_id));
             prune_references(project);
             Ok(json!({"op":"delete_page","page_id":page_id}))
         }
         Operation::ReorderPages { page_ids } => {
             ensure!(
-                project.page_tree.is_empty(),
-                "Page reordering is not supported for documents with a folder tree"
+                project.page_tree.iter().all(|node| {
+                    matches!(node, PageTreeNode::Page { children, .. } if children.is_empty())
+                }),
+                "reorder_pages requires a flat page directory"
             );
             let expected = project.pages.iter().map(|p| p.id).collect::<BTreeSet<_>>();
             ensure!(
@@ -422,7 +455,50 @@ fn apply(project: &mut Project, default_page: u64, operation: Operation) -> Resu
             project
                 .pages
                 .sort_by_key(|p| page_ids.iter().position(|id| *id == p.id).unwrap());
+            project.page_tree.clear();
             Ok(json!({"op":"reorder_pages","page_ids":page_ids}))
+        }
+        Operation::CreatePageFolder {
+            folder_id,
+            name,
+            parent_folder_id,
+        } => {
+            let id =
+                page_tree::create_folder(project, folder_id, name, parent_folder_id.as_deref())?;
+            Ok(json!({"op":"create_page_folder","folder_id":id}))
+        }
+        Operation::RenamePageFolder { folder_id, name } => {
+            page_tree::rename_folder(&mut project.page_tree, &folder_id, name)?;
+            Ok(json!({"op":"rename_page_folder","folder_id":folder_id}))
+        }
+        Operation::DeletePageFolder { folder_id } => {
+            ensure!(
+                page_tree::remove_entry(
+                    &mut project.page_tree,
+                    page_tree::Entry::Folder(&folder_id)
+                ),
+                "页面文件夹不存在"
+            );
+            Ok(json!({"op":"delete_page_folder","folder_id":folder_id}))
+        }
+        Operation::MovePageFolder {
+            folder_id,
+            parent_folder_id,
+        } => {
+            page_tree::move_entry(
+                project,
+                page_tree::Entry::Folder(&folder_id),
+                parent_folder_id.as_deref(),
+            )?;
+            Ok(json!({"op":"move_page_folder","folder_id":folder_id}))
+        }
+        Operation::MovePage { page_id, folder_id } => {
+            page_tree::move_entry(
+                project,
+                page_tree::Entry::Page(page_id),
+                folder_id.as_deref(),
+            )?;
+            Ok(json!({"op":"move_page","page_id":page_id,"folder_id":folder_id}))
         }
         Operation::CreateWidget {
             page_id,
@@ -613,24 +689,6 @@ fn validate_reorder_scope(page: &Page, ids: &BTreeSet<u64>) -> Result<()> {
         scope = Some(path.to_vec());
     }
     Ok(())
-}
-
-fn remove_tree_page(nodes: &mut Vec<PageTreeNode>, id: u64) {
-    let mut result = Vec::new();
-    for mut node in std::mem::take(nodes) {
-        let children = match &mut node {
-            PageTreeNode::Folder { children, .. } | PageTreeNode::Page { children, .. } => children,
-        };
-        remove_tree_page(children, id);
-        if matches!(node,PageTreeNode::Page {page_id,..} if page_id==id) {
-            if let PageTreeNode::Page { children, .. } = node {
-                result.extend(children);
-            }
-        } else {
-            result.push(node);
-        }
-    }
-    *nodes = result;
 }
 
 fn prune_references(project: &mut Project) {

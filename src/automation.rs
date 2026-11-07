@@ -115,6 +115,11 @@ fn execute_inner(
                 "library_note":"The complete GUI component catalog is available via rpshop_read_library and create_library_item. Table (12 editable grouped Rectangle cells), menus and trees are composite presets, not additional WidgetKind variants. Inspect item_id defaults, then use returned real widget/group IDs for later edits.",
                 "edit_tool": "rpshop_batch_edit",
                 "batch_operations": schema::batch_operations(page_only),
+                "page_folders": {
+                    "editable": !native && !page_only,
+                    "read_tool": "rpshop_read_pages",
+                    "id_type": "string"
+                },
                 "responsive_layout": {
                     "available":!native,
                     "canvas":"ResponsiveWidth",

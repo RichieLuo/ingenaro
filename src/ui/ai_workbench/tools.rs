@@ -1,6 +1,8 @@
 use super::*;
 use serde_json::{Value, json};
 
+mod editor;
+
 impl App {
     pub(super) fn ai_tool_arguments_private(&self, arguments: &Value) -> bool {
         let mut secrets = self
@@ -44,6 +46,7 @@ impl App {
             || self.editing.is_some()
             || self.confirm.is_some()
             || self.layer_name_dialog.is_some()
+            || self.page_folder_dialog.is_some()
         {
             return;
         }
@@ -107,6 +110,7 @@ impl App {
                     "rpshop_capabilities"
                         | "rpshop_list_versions"
                         | "rpshop_show_page"
+                        | "rpshop_set_view"
                         | "rpshop_page_activity"
                 );
             // Reads beyond explicitly attached context require disclosure approval.
@@ -162,6 +166,7 @@ impl App {
                     | "rpshop_list_versions"
                     | "rpshop_preview"
                     | "rpshop_show_page"
+                    | "rpshop_set_view"
                     | "rpshop_page_activity"
             );
         if !is_read
@@ -172,8 +177,10 @@ impl App {
         if self.ai_tool_contains_secret(call) {
             return Err("工具参数包含受保护凭据，已阻止写入".into());
         }
-        if call.name == "rpshop_batch_edit"
-            && self.ai.page_agents.reserves_page_edits()
+        if matches!(
+            call.name.as_str(),
+            "rpshop_batch_edit" | "rpshop_edit_widgets" | "rpshop_history"
+        ) && self.ai.page_agents.reserves_page_edits()
             && request.is_some_and(|request| request.same_task(&self.ai.task_cancelled))
         {
             return Err("本轮页面由原生子代理负责。先用 rpshop_design_pages 分工，子代理使用 rpshop_edit_assigned_page 写入".into());
@@ -185,6 +192,11 @@ impl App {
             }
         }
         match call.name.as_str() {
+            "rpshop_open_project"
+            | "rpshop_history"
+            | "rpshop_read_view"
+            | "rpshop_set_view"
+            | "rpshop_edit_widgets" => self.ai_editor_tool(ctx, call, request),
             automation::DESIGN_PAGES_TOOL => {
                 self.ai_prepare_page_agents(ctx, &call.arguments, request)
             }
@@ -338,12 +350,7 @@ impl App {
             automation::execute(&mut candidate, native, self.page, &selection, call)?
         };
         if candidate != self.project {
-            if let Some(native) = &self.native {
-                native.refresh_previews(&mut candidate, &self.project);
-                native
-                    .preview_scene(&candidate)
-                    .map_err(|e| format!("原生兼容校验未通过，未修改工程：{e}"))?;
-            }
+            self.ai_validate_native_candidate(&mut candidate)?;
             self.ai_tool_active(request)?;
             let before = std::mem::replace(&mut self.project, candidate);
             if let Some(id) = worker_page {
@@ -375,6 +382,16 @@ impl App {
             self.status = "AI 已修改当前工程 · Ctrl+Z 可撤销".into();
         }
         Ok(result)
+    }
+
+    fn ai_validate_native_candidate(&self, candidate: &mut Project) -> Result<(), String> {
+        if let Some(native) = &self.native {
+            native.refresh_previews(candidate, &self.project);
+            native
+                .preview_scene(candidate)
+                .map_err(|e| format!("原生兼容校验未通过，未修改工程：{e}"))?;
+        }
+        Ok(())
     }
 
     pub(in crate::ui) fn ai_permissions(&mut self, ctx: &egui::Context) {

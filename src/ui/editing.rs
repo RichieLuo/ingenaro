@@ -206,55 +206,14 @@ impl App {
     pub(super) fn flip_selection(&mut self, horizontal: bool) {
         let before = self.project.clone();
         let mut draft = before.clone();
-        let mut count = 0;
-        let mut result = Ok(());
-        for widget in &mut draft.pages[self.page].widgets {
-            if !self.selected.contains(&widget.id) || widget.locked {
-                continue;
-            }
-            if self
-                .native
-                .as_ref()
-                .is_some_and(|native| !native.is_editable_widget(widget.id))
-            {
-                continue;
-            }
-            if self.native.is_none()
-                && widget.vector_points.is_none()
-                && widget.kind == WidgetKind::Line
-            {
-                widget.vector_points = Some(
-                    serde_json::json!([[{"Path":{"X":0,"Y":0},"HigherSegmentExists":true},{"Path":{"X":1,"Y":1},"HigherSegmentExists":false}]]),
-                );
-            }
-            let is_bitmap = widget.kind == WidgetKind::Image
-                && self
-                    .native
-                    .as_ref()
-                    .is_none_or(|native| native.is_bitmap_widget(widget.id));
-            if is_bitmap {
-                if let Some(data) = &widget.image_data {
-                    match rpshop::bitmap::flip_data_uri(data, horizontal) {
-                        Ok(data) => {
-                            widget.image_data = Some(data);
-                            count += 1;
-                        }
-                        Err(error) => {
-                            result = Err(error);
-                            break;
-                        }
-                    }
-                }
-            } else if widget.vector_points.is_some() {
-                if let Err(error) = rpshop::vector_edit::flip_widget(widget, horizontal) {
-                    result = Err(error);
-                    break;
-                }
-                count += 1;
-            }
-        }
+        let result = flip_widgets(
+            &mut draft.pages[self.page],
+            &self.selected,
+            self.native.as_ref(),
+            horizontal,
+        );
         match result {
-            Ok(()) if count > 0 => {
+            Ok(count) if count > 0 => {
                 self.project = draft;
                 self.textures.clear();
                 self.status = format!(
@@ -263,72 +222,117 @@ impl App {
                 );
                 self.remember(before);
             }
-            Ok(()) => self.status = "当前选择没有可翻转的图像或矢量路径".into(),
+            Ok(_) => self.status = "当前选择没有可翻转的图像或矢量路径".into(),
             Err(error) => self.status = format!("翻转失败：{error:#}"),
         }
     }
 
     pub(super) fn paste(&mut self) {
-        let ComponentClipboard {
-            mut widgets,
-            group_names,
-        } = self.clipboard.clone();
-        let mut remap = HashMap::new();
-        let mut next_id = self.project.next_id;
-        let mut dropped_layout = false;
-        for w in &mut widgets {
-            let id = next_id;
-            let Some(next) = next_id.checked_add(1).filter(|next| *next < u64::MAX) else {
-                self.status = "组件标识已耗尽，无法粘贴".into();
-                return;
-            };
-            next_id = next;
-            remap.insert(w.id, id);
-            w.id = id;
-            w.x += 24.0;
-            w.y += 24.0;
-            if self.native.is_some() && w.horizontal_layout != Default::default() {
-                w.horizontal_layout = Default::default();
-                dropped_layout = true;
+        match paste_widgets(
+            &mut self.project,
+            self.page,
+            self.clipboard.clone(),
+            self.native.is_some(),
+        ) {
+            Ok((selected, dropped_layout)) => {
+                self.selected = selected;
+                if dropped_layout {
+                    self.status = "已按固定尺寸粘贴，响应式布局仅支持 RPShop 工程".into();
+                }
             }
-            if w.name.len() + " 副本".len() <= 1024 {
-                w.name.push_str(" 副本");
-            }
-            w.locked = false;
-        }
-        let groups = match rpshop::grouping::remap_group_ids(&mut widgets, &mut next_id) {
-            Ok(groups) => groups,
-            Err(error) => {
-                self.status = format!("粘贴失败：{error:#}");
-                return;
-            }
-        };
-        for w in &mut widgets {
-            if let Some(id) = w.interaction.target_widget.and_then(|v| remap.get(&v)) {
-                w.interaction.target_widget = Some(*id);
-            } else if w.interaction.target_widget.is_some_and(|id| {
-                !self.project.pages[self.page]
-                    .widgets
-                    .iter()
-                    .any(|x| x.id == id)
-            }) {
-                w.interaction = Default::default();
-            }
-        }
-        self.selected = widgets.iter().map(|w| w.id).collect();
-        self.project.next_id = next_id;
-        let page = &mut self.project.pages[self.page];
-        page.widgets.extend(widgets);
-        page.group_names.extend(
-            group_names
-                .into_iter()
-                .filter_map(|(old, name)| groups.get(&old).map(|id| (*id, name))),
-        );
-        let page_id = page.id;
-        self.project
-            .duplicate_interaction_events(page_id, &remap.into_iter().collect());
-        if dropped_layout {
-            self.status = "已按固定尺寸粘贴，响应式布局仅支持 RPShop 工程".into();
+            Err(error) => self.status = format!("粘贴失败：{error:#}"),
         }
     }
+}
+
+pub(super) fn flip_widgets(
+    page: &mut Page,
+    selected: &BTreeSet<u64>,
+    native: Option<&rpshop::rp_format::NativeDocument>,
+    horizontal: bool,
+) -> anyhow::Result<usize> {
+    let mut count = 0;
+    for widget in &mut page.widgets {
+        if !selected.contains(&widget.id) || widget.locked {
+            continue;
+        }
+        if native.is_some_and(|native| !native.is_editable_widget(widget.id)) {
+            continue;
+        }
+        if native.is_none() && widget.vector_points.is_none() && widget.kind == WidgetKind::Line {
+            widget.vector_points = Some(
+                serde_json::json!([[{"Path":{"X":0,"Y":0},"HigherSegmentExists":true},{"Path":{"X":1,"Y":1},"HigherSegmentExists":false}]]),
+            );
+        }
+        let is_bitmap = widget.kind == WidgetKind::Image
+            && native.is_none_or(|native| native.is_bitmap_widget(widget.id));
+        if is_bitmap {
+            if let Some(data) = &widget.image_data {
+                widget.image_data = Some(rpshop::bitmap::flip_data_uri(data, horizontal)?);
+                count += 1;
+            }
+        } else if widget.vector_points.is_some() {
+            rpshop::vector_edit::flip_widget(widget, horizontal)?;
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+pub(super) fn paste_widgets(
+    project: &mut Project,
+    page_index: usize,
+    clipboard: ComponentClipboard,
+    native: bool,
+) -> anyhow::Result<(BTreeSet<u64>, bool)> {
+    let ComponentClipboard {
+        mut widgets,
+        group_names,
+    } = clipboard;
+    let mut remap = HashMap::new();
+    let mut next_id = project.next_id;
+    let mut dropped_layout = false;
+    for w in &mut widgets {
+        let id = next_id;
+        let Some(next) = next_id.checked_add(1).filter(|next| *next < u64::MAX) else {
+            anyhow::bail!("组件标识已耗尽，无法粘贴");
+        };
+        next_id = next;
+        remap.insert(w.id, id);
+        w.id = id;
+        w.x += 24.0;
+        w.y += 24.0;
+        if native && w.horizontal_layout != Default::default() {
+            w.horizontal_layout = Default::default();
+            dropped_layout = true;
+        }
+        if w.name.len() + " 副本".len() <= 1024 {
+            w.name.push_str(" 副本");
+        }
+        w.locked = false;
+    }
+    let groups = rpshop::grouping::remap_group_ids(&mut widgets, &mut next_id)?;
+    for w in &mut widgets {
+        if let Some(id) = w.interaction.target_widget.and_then(|v| remap.get(&v)) {
+            w.interaction.target_widget = Some(*id);
+        } else if w
+            .interaction
+            .target_widget
+            .is_some_and(|id| !project.pages[page_index].widgets.iter().any(|x| x.id == id))
+        {
+            w.interaction = Default::default();
+        }
+    }
+    let selected = widgets.iter().map(|w| w.id).collect();
+    project.next_id = next_id;
+    let page = &mut project.pages[page_index];
+    page.widgets.extend(widgets);
+    page.group_names.extend(
+        group_names
+            .into_iter()
+            .filter_map(|(old, name)| groups.get(&old).map(|id| (*id, name))),
+    );
+    let page_id = page.id;
+    project.duplicate_interaction_events(page_id, &remap.into_iter().collect());
+    Ok((selected, dropped_layout))
 }

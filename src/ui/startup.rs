@@ -198,6 +198,7 @@ impl App {
             clipboard: Default::default(),
             expanded_layer_groups: BTreeSet::new(),
             layer_name_dialog: None,
+            page_folder_dialog: None,
             zoom: 0.65,
             view: CanvasView::default(),
             sidebar_layout,

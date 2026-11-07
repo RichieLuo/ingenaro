@@ -75,8 +75,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='turn/start') {
   if(m.params.input[0].text.includes('multimodal')) {
    const blocks=m.params.input;
-   const expected="You are RPShop's design assistant. Use only RPShop tools to inspect or modify the open prototype. Do not modify project files directly. Respect explicit tool approvals.\n\nProject context:\nunchanged mock context\n设计页面\n\nUser request:\nmultimodal reference request";
-   if(blocks.length!==3||blocks[0].type!=='text'||blocks[0].text!==expected)process.exit(10);
+   const expected="\n\nProject context:\nunchanged mock context\n设计页面\n\nUser request:\nmultimodal reference request";
+   if(blocks.length!==3||blocks[0].type!=='text'||!blocks[0].text.endsWith(expected)||!blocks[0].text.includes('## Organize the page directory'))process.exit(10);
    blocks.slice(1).forEach((block,i)=>{
     if(block.type!=='image'||Object.hasOwn(block,'path')||!block.url.startsWith('data:image/png;base64,'))process.exit(11);
     const data=block.url.slice('data:image/png;base64,'.length), png=Buffer.from(data,'base64');
@@ -142,9 +142,9 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
   send({type:'system',subtype:'init',session_id:'claude-mock-session'});
   if(Array.isArray(m.message.content)) {
    const blocks=m.message.content;
-   const expected="You are RPShop's design assistant. Use only RPShop tools to inspect or modify the open prototype. Do not modify project files directly. Respect explicit tool approvals.\n\nProject context:\nunchanged mock context\n设计页面\n\nUser request:\nmultimodal reference request";
+   const expected="\n\nProject context:\nunchanged mock context\n设计页面\n\nUser request:\nmultimodal reference request";
    const resumed=args.includes('--resume');
-   if(blocks.length!==3||blocks[2].type!=='text'||blocks[2].text!==expected||m.message.role!=='user'||m.parent_tool_use_id!==null)process.exit(10);
+   if(blocks.length!==3||blocks[2].type!=='text'||!blocks[2].text.endsWith(expected)||!blocks[2].text.includes('## Organize the page directory')||m.message.role!=='user'||m.parent_tool_use_id!==null)process.exit(10);
    if(resumed&&(args[args.indexOf('--resume')+1]!=='claude-mock-session'||m.session_id!=='claude-mock-session'))process.exit(14);
    blocks.slice(0,2).forEach((block,i)=>{
     if(block.type!=='image'||block.source.type!=='base64'||block.source.media_type!=='image/png')process.exit(11);

@@ -517,8 +517,9 @@ impl Job {
                 self.request.context, self.request.prompt
             );
         }
+        let automation_skill = include_str!("../../.agents/skills/rpshop-automation/SKILL.md");
         format!(
-            "You are RPShop's design assistant. Use only RPShop tools to inspect or modify the open prototype. Do not modify project files directly. Respect explicit tool approvals.\n\nProject context:\n{}\n\nUser request:\n{}",
+            "You are RPShop's design assistant. Use only the supplied RPShop tools to inspect or modify the live prototype. Respect explicit tool approvals.\n\n{automation_skill}\n\nProject context:\n{}\n\nUser request:\n{}",
             self.request.context, self.request.prompt
         )
     }

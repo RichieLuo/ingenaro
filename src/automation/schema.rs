@@ -16,6 +16,11 @@ pub(super) const GUI_TOOLS: &[&str] = &[
     "rpshop_publish_html",
     "rpshop_list_versions",
     "rpshop_restore_version",
+    "rpshop_open_project",
+    "rpshop_history",
+    "rpshop_read_view",
+    "rpshop_set_view",
+    "rpshop_edit_widgets",
 ];
 const PAGE_READ_TOOLS: &[&str] = &[
     "rpshop_read_pages",
@@ -52,7 +57,15 @@ impl ToolSet {
 fn is_page_operation(name: &str) -> bool {
     !matches!(
         name,
-        "update_project" | "create_page" | "delete_page" | "reorder_pages"
+        "update_project"
+            | "create_page"
+            | "delete_page"
+            | "reorder_pages"
+            | "create_page_folder"
+            | "rename_page_folder"
+            | "delete_page_folder"
+            | "move_page_folder"
+            | "move_page"
     )
 }
 
@@ -82,6 +95,11 @@ pub(super) const OPERATIONS: &[&str] = &[
     "update_page",
     "delete_page",
     "reorder_pages",
+    "create_page_folder",
+    "rename_page_folder",
+    "delete_page_folder",
+    "move_page_folder",
+    "move_page",
     "create_widget",
     "create_library_item",
     "update_widget",
@@ -109,6 +127,9 @@ fn text(max: usize) -> Value {
 }
 fn group_name() -> Value {
     json!({"type":"string","minLength":1,"maxLength":1024,"description":"Non-blank name, up to 1024 UTF-8 bytes."})
+}
+fn folder_id() -> Value {
+    json!({"type":"string","minLength":1,"maxLength":1024})
 }
 fn color() -> Value {
     json!({"type":"string","pattern":"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"})
@@ -193,7 +214,8 @@ fn batch_schema(page_only: bool) -> Value {
             "create_page",
             json!({"id":id(),"name":text(1024),"width":number(64.0,20000.0),
             "height":number(64.0,20000.0),"background":color(),"canvas":canvas(),
-            "responsive_min_width":nullable(number(64.0,20000.0))}),
+            "responsive_min_width":nullable(number(64.0,20000.0)),
+            "folder_id":nullable(folder_id())}),
             &["name"],
         ),
         op(
@@ -202,7 +224,37 @@ fn batch_schema(page_only: bool) -> Value {
             &["properties"],
         ),
         op("delete_page", json!({"page_id":id()}), &["page_id"]),
-        op("reorder_pages", json!({"page_ids":ids()}), &["page_ids"]),
+        op(
+            "reorder_pages",
+            json!({"page_ids":{ "type":"array","items":id(),"minItems":1,"maxItems":128,
+                "uniqueItems":true,"description":"All page IDs in the desired order. Requires a flat page directory."}}),
+            &["page_ids"],
+        ),
+        op(
+            "create_page_folder",
+            json!({"folder_id":folder_id(),"name":group_name(),"parent_folder_id":nullable(folder_id())}),
+            &["name"],
+        ),
+        op(
+            "rename_page_folder",
+            json!({"folder_id":folder_id(),"name":group_name()}),
+            &["folder_id", "name"],
+        ),
+        op(
+            "delete_page_folder",
+            json!({"folder_id":folder_id()}),
+            &["folder_id"],
+        ),
+        op(
+            "move_page_folder",
+            json!({"folder_id":folder_id(),"parent_folder_id":nullable(folder_id())}),
+            &["folder_id"],
+        ),
+        op(
+            "move_page",
+            json!({"page_id":id(),"folder_id":nullable(folder_id())}),
+            &["page_id"],
+        ),
         op(
             "create_widget",
             json!({"page_id":id(),"id":id(),"kind":kind(),"properties":widget_properties(false)}),
@@ -315,7 +367,7 @@ pub(super) fn definitions(set: ToolSet) -> Value {
         ),
         (
             "rpshop_read_pages",
-            "Read page summaries and the navigation folder tree.",
+            "Read page summaries and the navigation tree. Folder nodes use string IDs and page nodes use numeric page_id. An empty page_tree means all listed pages are at the root.",
             object(json!({}), &[]),
         ),
         (
@@ -353,7 +405,12 @@ pub(super) fn definitions(set: ToolSet) -> Value {
     } else {
         "Explicit create IDs must be >= next_id; use them for references within a batch. Omitted page_id always means the page current at batch start."
     };
-    list.push(tool("rpshop_batch_edit",&format!("Apply 1–512 operations as one atomic validated transaction. No edits survive a failed operation. IDs are positive document IDs, not page indices. {addressing} Native page structure/dimensions and project renaming are unsupported; source-dependent edits require native host validation. Delete operations prune dangling interactions. Read rpshop_read_layers to find group and widget IDs. Group wraps complete outer groups and can set a name. Rename an existing group with rename_group and a widget with update_widget (properties.name). Unlock locked widgets explicitly before editing. create_library_item reuses any GUI library preset (read rpshop_read_library first): x/y set bounding-box origin, optional width/height independently scale member positions/sizes while preserving normalized vectors, groups, typography, padding and radius. Optional strict properties apply a shared style to all members; texts overrides a prefix in factory order. Returns real widget_ids/group_ids/bounds; template example IDs are not live IDs."),batch_schema(page_only),false,true));
+    let folders = if page_only {
+        ""
+    } else {
+        " For navigation folders in .rpshop, read rpshop_read_pages, then use create_page_folder, move_page, create_page with folder_id, or rename_page_folder, move_page_folder and delete_page_folder. Folder IDs are strings. Supply a unique folder_id at creation to refer to it in the same batch, or use the returned ID in a later batch. An omitted or null destination means root. Deleting a folder promotes its children and preserves the pages."
+    };
+    list.push(tool("rpshop_batch_edit",&format!("Apply 1–512 operations as one atomic validated transaction. No edits survive a failed operation. Page and widget IDs are positive document IDs, not page indices. {addressing}{folders} Native page structure/dimensions and project renaming are unsupported; source-dependent edits require native host validation. Deleting pages or widgets prunes dangling interactions. Read rpshop_read_layers to find group and widget IDs. Group wraps complete outer groups and can set a name. Rename an existing group with rename_group and a widget with update_widget (properties.name). Unlock locked widgets explicitly before editing. create_library_item reuses any GUI library preset (read rpshop_read_library first): x/y set bounding-box origin, optional width/height independently scale member positions/sizes while preserving normalized vectors, groups, typography, padding and radius. Optional strict properties apply a shared style to all members; texts overrides a prefix in factory order. Returns real widget_ids/group_ids/bounds; template example IDs are not live IDs."),batch_schema(page_only),false,true));
     if set == ToolSet::Design {
         list.push(tool(
             READ_TOOL,
@@ -455,13 +512,68 @@ pub(super) fn definitions(set: ToolSet) -> Value {
             object(json!({"version_id":id()}), &["version_id"]),
             true,
         ),
+        (
+            "rpshop_open_project",
+            "Open a project through the editor's file picker, or open its welcome example with source=demo. The host handles unsaved changes and the user selects the file. Switching documents invalidates the old tool session.",
+            object(
+                json!({"source":{"type":"string","enum":["file","demo"]}}),
+                &[],
+            ),
+            true,
+        ),
+        (
+            "rpshop_history",
+            "Undo or redo one step in the live editor's document history. This is the same history as the toolbar. Use rpshop_read_view to check availability.",
+            object(
+                json!({"action":{"type":"string","enum":["undo","redo"]}}),
+                &["action"],
+            ),
+            true,
+        ),
+        (
+            "rpshop_read_view",
+            "Read the current page, selection, canvas zoom, grid, snap and undo/redo availability.",
+            object(json!({}), &[]),
+            false,
+        ),
+        (
+            "rpshop_set_view",
+            "Set canvas view state without changing the document. Omit page_id to keep the current page. An empty widget_ids clears selection. Choose either zoom (1 is 100%) or a focus command. View changes do not add undo steps.",
+            object(
+                json!({
+                    "page_id":id(),
+                    "widget_ids":{"type":"array","items":id(),"maxItems":5000,"uniqueItems":true},
+                    "zoom":number(0.1,10.0),
+                    "focus":{"type":"string","enum":["fit_page","center_page","fit_selection","center_selection","origin"]},
+                    "grid":{"type":"boolean"},
+                    "snap":{"type":"boolean"}
+                }),
+                &[],
+            ),
+            false,
+        ),
+        (
+            "rpshop_edit_widgets",
+            "Run one editor operation on explicit widget IDs in a page. Supports group-aware alignment, distribution, 90-degree rotation, bitmap/vector reflection and duplication with new IDs and remapped references. Only duplicate accepts target_page_id to copy to another page. Each successful edit is one undo step. Native source compatibility is validated before commit. Use rpshop_batch_edit for CRUD, grouping, layer order and arbitrary property edits.",
+            object(
+                json!({
+                "page_id":id(),"target_page_id":id(),"widget_ids":ids(),
+                    "action":{"type":"string","enum":["align_left","align_center","align_right","align_top","align_middle","align_bottom","distribute_horizontal","distribute_vertical","rotate_counterclockwise","rotate_clockwise","flip_horizontal","flip_vertical","duplicate"]}
+                }),
+                &["widget_ids", "action"],
+            ),
+            true,
+        ),
     ];
     for (name, description, input, destructive) in special {
         list.push(tool(
             name,
             description,
             input,
-            name == "rpshop_list_versions",
+            matches!(
+                name,
+                "rpshop_list_versions" | "rpshop_read_view" | "rpshop_set_view"
+            ),
             destructive,
         ));
     }

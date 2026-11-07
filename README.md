@@ -107,6 +107,8 @@ cargo run --locked -- --open .\my-project.rp
 | 设置响应式页面 | `{"op":"update_page","properties":{"canvas":"ResponsiveWidth","width":1280,"responsive_min_width":900}}` |
 | 横向伸展元件 | `{"op":"update_widget","widget_id":2,"properties":{"horizontal_layout":{"left":0,"right":100}}}` |
 
+在 `.rpshop` 工程的左侧「目录」点击「新建文件夹」，右键页面或文件夹可选择「移动到」。文件夹的右键菜单也可以创建子文件夹或页面、重命名和删除文件夹。删除文件夹会将内容移到上一级。AI 可以用 `rpshop_read_pages` 查询目录并用 `rpshop_batch_edit` 操作它。工具发现、参数示例和权限流程见 [RPShop 自动化技能](.agents/skills/rpshop-automation/SKILL.md)。
+
 <details>
 <summary>快捷键与画布操作</summary>
 

@@ -421,6 +421,111 @@ fn tool_schemas_cover_every_dispatch_name_and_define_strict_batch_variants() {
     assert_eq!(publish["inputSchema"]["required"], json!(["source"]));
 }
 
+#[test]
+fn page_folder_batches_keep_page_ids_and_preserve_children_on_delete() {
+    let mut project = Project::blank();
+    let first = project.pages[0].id;
+    let result = batch(&mut project, json!([
+        {"op":"create_page_folder","folder_id":"work","name":" 工作 "},
+        {"op":"create_page_folder","folder_id":"review","parent_folder_id":"work","name":"审阅"},
+        {"op":"move_page","page_id":first,"folder_id":"review"},
+        {"op":"create_page","name":"概览","folder_id":"work"}
+    ])).unwrap();
+    let second = result["results"][3]["page_id"].as_u64().unwrap();
+    assert_eq!(result["results"][0]["folder_id"], "work");
+    let read = |project: &mut Project| {
+        execute(
+            project,
+            false,
+            0,
+            &[],
+            &call("rpshop_read_pages", json!({})),
+        )
+        .unwrap()
+    };
+    let tree = read(&mut project)["page_tree"].clone();
+    assert_eq!(tree[0]["name"], "工作");
+    assert_eq!(tree[0]["children"][0]["children"][0]["page_id"], first);
+    assert_eq!(tree[0]["children"][1]["page_id"], second);
+    assert_eq!(
+        serde_json::from_value::<Project>(serde_json::to_value(&project).unwrap()).unwrap(),
+        project
+    );
+
+    batch(
+        &mut project,
+        json!([
+            {"op":"rename_page_folder","folder_id":"review","name":"已审阅"},
+            {"op":"move_page_folder","folder_id":"review","parent_folder_id":null},
+            {"op":"delete_page_folder","folder_id":"work"}
+        ]),
+    )
+    .unwrap();
+    let tree = read(&mut project)["page_tree"].clone();
+    assert_eq!(tree[0]["page_id"], second);
+    assert_eq!(tree[1]["name"], "已审阅");
+    assert_eq!(tree[1]["children"][0]["page_id"], first);
+    assert_eq!(
+        project.pages.iter().map(|page| page.id).collect::<Vec<_>>(),
+        [first, second]
+    );
+}
+
+#[test]
+fn page_folder_batches_reject_cycles_native_writes_and_page_worker_writes() {
+    let mut project = Project::blank();
+    let page = project.pages[0].id;
+    batch(
+        &mut project,
+        json!([
+            {"op":"create_page_folder","folder_id":"outer","name":"外层"},
+            {"op":"create_page_folder","folder_id":"inner","name":"内层","parent_folder_id":"outer"}
+        ]),
+    )
+    .unwrap();
+    let before = project.clone();
+    let failure = batch(
+        &mut project,
+        json!([
+            {"op":"create_page","name":"整批回滚","folder_id":"outer"},
+            {"op":"move_page_folder","folder_id":"outer","parent_folder_id":"inner"}
+        ]),
+    )
+    .unwrap_err();
+    assert!(failure.contains("自身或其下级"));
+    assert_eq!(project, before);
+    let edit = call(
+        "rpshop_batch_edit",
+        json!({"operations":[
+            {"op":"move_page","page_id":page,"folder_id":"inner"}
+        ]}),
+    );
+    assert!(
+        execute(&mut project, true, 0, &[], &edit)
+            .unwrap_err()
+            .contains("原生")
+    );
+    assert!(execute_page(&mut project, false, page, &edit).is_err());
+    assert_eq!(project, before);
+    let capabilities = call("rpshop_capabilities", json!({}));
+    let worker = execute_page(&mut project, false, page, &capabilities).unwrap();
+    assert_eq!(worker["page_folders"]["editable"], false);
+    for operation in [
+        "create_page_folder",
+        "rename_page_folder",
+        "delete_page_folder",
+        "move_page_folder",
+        "move_page",
+    ] {
+        assert!(
+            !worker["batch_operations"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(operation))
+        );
+    }
+}
+
 fn request_from(host: &ToolHost) -> ToolRequest {
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {

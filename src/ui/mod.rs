@@ -280,6 +280,7 @@ pub struct App {
     clipboard: editing::ComponentClipboard,
     expanded_layer_groups: BTreeSet<u64>,
     layer_name_dialog: Option<layers::NameDialog>,
+    page_folder_dialog: Option<page_tree::FolderNameDialog>,
     zoom: f32,
     view: CanvasView,
     sidebar_layout: sidebar::SidebarLayout,
@@ -340,6 +341,7 @@ impl eframe::App for App {
             }
         }
         if self.layer_name_dialog.is_none()
+            && self.page_folder_dialog.is_none()
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
             self.view.panning = None;
@@ -361,6 +363,7 @@ impl eframe::App for App {
         if self.confirm.is_none()
             && self.editing.is_none()
             && self.layer_name_dialog.is_none()
+            && self.page_folder_dialog.is_none()
             && !self.ai_modal_active()
             && !self.ai_page_overview_visible()
         {
@@ -435,6 +438,7 @@ impl eframe::App for App {
         self.ai_image_preview(ctx);
         self.ai_palette_dialog(ctx);
         self.show_layer_name_dialog(ctx);
+        self.show_page_folder_dialog(ctx);
         self.dialogs(ctx);
         #[cfg(target_os = "windows")]
         window_chrome::paint_border(ctx);
