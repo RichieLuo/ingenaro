@@ -1,9 +1,12 @@
 pub fn run(args: &[String]) -> bool {
     if args.get(1).is_some_and(|arg| arg == "--mcp-stdio") {
         let result = (|| -> Result<(), String> {
-            let endpoint = args.get(2).ok_or("用法：ingenaro --mcp-stdio http://127.0.0.1:PORT/mcp；兼容密钥变量 RPSHOP_MCP_TOKEN")?;
-            let token = std::env::var("RPSHOP_MCP_TOKEN")
-                .map_err(|_| "缺少 RPSHOP_MCP_TOKEN；请在 AI 工作台中启用当前工程 MCP")?;
+            let endpoint = args.get(2).ok_or(
+                "用法：ingenaro --mcp-stdio http://127.0.0.1:PORT/mcp；密钥变量 INGENARO_MCP_TOKEN",
+            )?;
+            let token = std::env::var("INGENARO_MCP_TOKEN")
+                .or_else(|_| std::env::var("RPSHOP_MCP_TOKEN"))
+                .map_err(|_| "缺少 INGENARO_MCP_TOKEN；请在 AI 工作台中启用当前工程 MCP")?;
             ingenaro::automation::run_stdio(endpoint, &token)
         })();
         if let Err(error) = result {
@@ -61,13 +64,16 @@ pub fn run(args: &[String]) -> bool {
     }
     if args.get(1).is_some_and(|a| a == "--import") {
         let result = (|| -> anyhow::Result<()> {
-            anyhow::ensure!(args.len() == 4, "用法：ingenaro --import 输入.rp 输出.ingenaro");
+            anyhow::ensure!(
+                args.len() == 4,
+                "用法：ingenaro --import 输入.rp 输出.ingenaro"
+            );
             let input = std::path::Path::new(&args[2]);
             let output = std::path::Path::new(&args[3]);
             anyhow::ensure!(
-                output
-                    .extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("ingenaro") || e.eq_ignore_ascii_case("rpshop")),
+                output.extension().is_some_and(
+                    |e| e.eq_ignore_ascii_case("ingenaro") || e.eq_ignore_ascii_case("rpshop")
+                ),
                 "转换输出请使用 .ingenaro（也接受旧版 .rpshop）；直接编辑原生文件请使用打开和保存功能"
             );
             let imported = ingenaro::rp_format::import(input)?;

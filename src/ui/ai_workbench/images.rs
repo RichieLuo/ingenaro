@@ -396,6 +396,7 @@ impl App {
     pub(in crate::ui) fn ai_handle_image_input(&mut self, ctx: &egui::Context) {
         self.ai_poll_images();
         if !self.ai.visible
+            || self.plugins.open
             || self.ai.settings_open
             || self.confirm.is_some()
             || self.ai_modal_active()

@@ -68,7 +68,7 @@ pub fn start(client: ToolClient) -> Result<Server, String> {
         pending: Mutex::new(BTreeMap::new()),
     });
     let thread = thread::Builder::new()
-        .name("rpshop-mcp".into())
+        .name("ingenaro-mcp".into())
         .spawn(move || {
             let mut workers: Vec<JoinHandle<()>> = Vec::new();
             while !shared.stopped.load(Ordering::Acquire) {
@@ -93,7 +93,7 @@ pub fn start(client: ToolClient) -> Result<Server, String> {
                         }
                         let state = shared.clone();
                         if let Ok(worker) = thread::Builder::new()
-                            .name("rpshop-mcp-request".into())
+                            .name("ingenaro-mcp-request".into())
                             .spawn(move || serve(stream, &state))
                         {
                             workers.push(worker);
@@ -208,7 +208,7 @@ fn dispatch(state: &State, request: Value) -> Response {
                 PROTOCOL
             };
             json!({"protocolVersion":version,"capabilities":{"tools":{"listChanged":false}},
-                "serverInfo":{"name":"rpshop-live","version":env!("CARGO_PKG_VERSION")},
+                "serverInfo":{"name":"ingenaro-live","version":env!("CARGO_PKG_VERSION")},
                 "instructions":"All tools operate on the live GUI document. Editing and filesystem actions require host approval. Calls do not open project files."})
         }
         "ping" => json!({}),

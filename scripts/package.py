@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and package a Shop desktop application using only Python's standard library."""
+"""Build and package Ingenaro using only Python's standard library."""
 
 import argparse
 import csv
@@ -24,7 +24,7 @@ from windows_install import refresh_install
 
 
 def build_windows_launcher(destination, target):
-    arguments = ["rustc", "--edition", "2024", "--crate-name", "shop_launcher", "--target", target,
+    arguments = ["rustc", "--edition", "2024", "--crate-name", "ingenaro_launcher", "--target", target,
                  "-O", "-C", "strip=symbols", "-C", "target-feature=+crt-static",
                  str(SCRIPT_DIRECTORY / "windows" / "launcher.rs"), "-o", str(destination)]
     linker = os.environ.get(f"CARGO_TARGET_{target.replace('-', '_').upper()}_LINKER")
@@ -124,7 +124,7 @@ def package_project(root, target, output=None, skip_build=False, expected_tag=No
     manifest = cargo_json(root, "metadata", "--no-deps", "--locked", "--offline", "--format-version", "1")
     package = next(item for item in manifest["packages"]
                    if Path(item["manifest_path"]).resolve() == root / "Cargo.toml")
-    settings = package["metadata"]["shop"]
+    settings = package["metadata"]["ingenaro"]
     product, version = settings["product-name"], package["version"]
     if expected_tag and expected_tag != f"v{version}":
         raise ValueError(f"Release tag {expected_tag!r} does not match Cargo version v{version}")
@@ -160,7 +160,7 @@ def package_project(root, target, output=None, skip_build=False, expected_tag=No
     metadata = cargo_json(root, "metadata", "--locked", "--offline", "--format-version", "1", "--filter-platform", target)
     output.mkdir(parents=True, exist_ok=True)
     # Prepare privately and move finished artifacts only after every step succeeds.
-    with tempfile.TemporaryDirectory(prefix=".shop-package-", dir=output) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".ingenaro-package-", dir=output) as temporary:
         temporary = Path(temporary)
         prepared = temporary / name
         prepared.mkdir()
@@ -179,7 +179,7 @@ def package_project(root, target, output=None, skip_build=False, expected_tag=No
             "packaged_at": datetime.now(timezone.utc).isoformat(),
         }
         if executable_extension:
-            launcher = prepared / "shop-launcher.exe"
+            launcher = prepared / "ingenaro-launcher.exe"
             build_windows_launcher(launcher, target)
             package_metadata.update(launcher=launcher.name, launcher_sha256=hashlib.sha256(launcher.read_bytes()).hexdigest())
             for source, filename in (("install.ps1", "install.ps1"), ("windows_install.py", "windows_install.py"),

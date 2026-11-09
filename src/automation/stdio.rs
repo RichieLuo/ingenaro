@@ -97,7 +97,7 @@ pub fn run_stdio(endpoint: &str, token: &str) -> Result<(), String> {
         let output = output.clone();
         let token = credential.clone();
         let worker = thread::Builder::new()
-            .name("rpshop-mcp-stdio".into())
+            .name("ingenaro-mcp-stdio".into())
             .spawn(move || {
                 let response = match forward(address, &token, &line) {
                     Ok(Some(response)) => response,

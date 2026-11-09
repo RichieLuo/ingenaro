@@ -1,5 +1,5 @@
 //! Validated, memory-only image inputs. Source files and metadata are never retained.
-//! CLI-owned conversation/session storage is outside Ingenaro's persistence boundary.
+//! CLI-owned conversation/session storage is outside the host’s persistence boundary.
 use anyhow::{Result, anyhow, bail};
 use base64::Engine as _;
 use image::{ImageDecoder, ImageEncoder, ImageFormat, ImageReader};

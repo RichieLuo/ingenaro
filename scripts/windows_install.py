@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a verified Shop package for this user, with a stable latest-build launcher."""
+"""Install a verified desktop package for this user, with a stable latest-build launcher."""
 
 import argparse
 from contextlib import contextmanager
@@ -74,7 +74,7 @@ def load_package(directory):
     metadata = json.loads((directory / "package.json").read_text(encoding="utf-8"))
     name = metadata.get("name")
     if name not in APPLICATIONS or metadata.get("product") != APPLICATIONS[name][0]:
-        raise ValueError("Not a supported Shop application package")
+        raise ValueError("Not a supported desktop application package")
     if not metadata.get("target", "").endswith("-pc-windows-msvc"):
         raise ValueError("Only a Windows MSVC package can be installed")
     for key, checksum_key in (("executable", "executable_sha256"), ("launcher", "launcher_sha256")):
@@ -119,7 +119,15 @@ def install_home(product, install_base=None):
     local = os.environ.get("LOCALAPPDATA")
     if not local:
         raise OSError("LOCALAPPDATA is required for a per-user installation")
-    return Path(local) / "Programs" / "Shop" / product
+    programs = Path(local) / "Programs"
+    legacy = programs / "Shop" / product
+    if product != "Ingenaro":
+        return legacy
+    standalone = programs / product
+    if not (standalone / "install-state.json").is_file() and (legacy / "install-state.json").is_file():
+        # Keep the old target alive for pinned shortcuts and existing file associations.
+        return legacy
+    return standalone
 
 
 def installation_state(home):
@@ -192,7 +200,9 @@ def create_shortcut(product, launcher, payload):
     roaming = os.environ.get("APPDATA")
     if not roaming:
         raise OSError("APPDATA is required for a Start menu shortcut")
-    shortcuts = Path(roaming) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Shop"
+    shortcuts = Path(roaming) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    if product != "Ingenaro":
+        shortcuts /= "Shop"
     shortcuts.mkdir(parents=True, exist_ok=True)
     script_directory = Path(__file__).resolve().parent
     helper = script_directory / "windows" / "create-shortcut.ps1"
@@ -297,7 +307,7 @@ def refresh_install_here(directory, repository, mode=None):
     summary = json.loads((Path(directory) / "package.json").read_text(encoding="utf-8"))
     if summary.get("name") not in APPLICATIONS:
         if mode:
-            raise ValueError("This package has no registered Shop installation profile")
+            raise ValueError("This package has no registered installation profile")
         return None
     metadata = load_package(directory)
     if metadata["target"] != native_windows_target():

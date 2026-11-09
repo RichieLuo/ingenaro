@@ -56,8 +56,8 @@ impl App {
             read_only,
             ..
         } = submission;
-        if !ai::is_local(config.kind) && !cfg!(test) {
-            self.ai.state = "当前仅支持 Claude Code 和 Codex".into();
+        if !ai::is_desktop_engine(config.kind) && !cfg!(test) {
+            self.ai.state = "请选择可用的本地智能体或自定义引擎".into();
             return false;
         }
         let native_edit = kind == design::ArtifactKind::Native && !read_only;
@@ -165,21 +165,27 @@ impl App {
         // Keep them stable across turns; the live host checks this turn's mode.
         if ai::is_local(config.kind) {
             tools = tools.with_parallel_design();
+        } else if config.kind == ai::EngineKind::Plugin {
+            tools = tools.with_single_design();
         }
         // CLI-specific MCP bearer capabilities expire with this turn, not with the application.
-        let mcp = match automation::start(tools.clone()) {
-            Ok(server) => {
-                let endpoint = ai::McpEndpoint {
-                    endpoint: server.endpoint().to_owned(),
-                    token: server.token().to_owned(),
-                };
-                self.ai.agent_server = Some(server);
-                Some(endpoint)
+        let mcp = if ai::is_local(config.kind) {
+            match automation::start(tools.clone()) {
+                Ok(server) => {
+                    let endpoint = ai::McpEndpoint {
+                        endpoint: server.endpoint().to_owned(),
+                        token: server.token().to_owned(),
+                    };
+                    self.ai.agent_server = Some(server);
+                    Some(endpoint)
+                }
+                Err(error) => {
+                    self.ai.state = error;
+                    None
+                }
             }
-            Err(error) => {
-                self.ai.state = error;
-                None
-            }
+        } else {
+            None
         };
         let key = if config.kind == ai::EngineKind::OpenAiCompatible {
             self.ai

@@ -8,8 +8,7 @@ fn cli(source: &str, kind: EngineKind) -> Option<(EngineConfig, PathBuf)> {
     {
         return None;
     }
-    let directory =
-        std::env::temp_dir().join(format!("rpshop-catalog-test-{}", uuid::Uuid::new_v4()));
+    let directory = std::env::temp_dir().join(format!("ai-catalog-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&directory).unwrap();
     let file = directory.join("agent.js");
     std::fs::write(&file, source).unwrap();

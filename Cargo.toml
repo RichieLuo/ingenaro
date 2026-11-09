@@ -3,13 +3,17 @@ name = "ingenaro"
 version = "1.0.0"
 edition = "2024"
 rust-version = "1.89"
-description = "A Rust desktop prototyping studio"
+description = "An AI-first desktop prototyping studio"
 license = "MIT"
 
-[package.metadata.shop]
+[workspace]
+members = ["plugins/ai-runtime"]
+
+[package.metadata.ingenaro]
 product-name = "Ingenaro"
 
 [dependencies]
+ai-design-runtime = { version = "0.1.0", path = "plugins/ai-runtime" }
 anyhow = "1"
 arboard = { version = "3", default-features = false, features = ["image-data"] }
 base64 = "0.22"

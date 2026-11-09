@@ -284,3 +284,65 @@ fn sampled_paint_is_clipped_and_does_not_mutate_the_committed_project() {
     }
     assert_eq!(after, committed);
 }
+
+#[test]
+fn drawing_paints_transparent_gif_frames_and_loops_until_finished() {
+    let context = egui::Context::default();
+    let mut reveal = DesignReveal::default();
+    reveal.record(&document(0), &document(3), 0.0);
+    let clip = Rect::from_min_size(Pos2::ZERO, vec2(300.0, 200.0));
+    let bounds = Rect::from_min_size(Pos2::new(12.0, 30.0), vec2(90.0, 50.0));
+    let mut painted = Vec::new();
+
+    for time in [0.025, 0.225, 0.625, 1.0] {
+        let output = context.run(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |ctx| {
+                let painter = ctx
+                    .layer_painter(egui::LayerId::background())
+                    .with_clip_rect(clip);
+                reveal.paint_status(ctx, &painter, 1, time, Some((bounds, 0.5)));
+            },
+        );
+        let sprite = output.shapes.iter().find_map(|shape| match &shape.shape {
+            egui::Shape::Mesh(mesh) => {
+                assert!(clip.contains_rect(shape.clip_rect));
+                assert!(mesh.vertices.iter().all(|vertex| clip.contains(vertex.pos)));
+                Some(mesh.texture_id)
+            }
+            _ => None,
+        });
+        if painted.is_empty() {
+            let animation = reveal.naro.as_ref().unwrap();
+            for index in 0..12 {
+                let id = animation.frame_at(f64::from(index) * 0.05 + 0.025).id();
+                let (_, delta) = output
+                    .textures_delta
+                    .set
+                    .iter()
+                    .find(|(texture, _)| *texture == id)
+                    .expect("decoded GIF frame uploaded");
+                let egui::ImageData::Color(image) = &delta.image;
+                let [width, height] = image.size;
+                for (x, y) in [
+                    (0, 0),
+                    (width - 1, 0),
+                    (0, height - 1),
+                    (width - 1, height - 1),
+                ] {
+                    assert_eq!(image.pixels[y * width + x].a(), 0);
+                }
+                assert!(image.pixels.iter().any(|pixel| pixel.a() == 255));
+            }
+        }
+        painted.push(sprite);
+    }
+
+    assert!(painted[0].is_some() && painted[1].is_some());
+    assert_ne!(painted[0], painted[1], "the canvas advances the GIF");
+    assert_eq!(painted[0], painted[2], "the GIF loops during drawing");
+    assert_eq!(painted[3], None, "the sprite clears when drawing ends");
+}

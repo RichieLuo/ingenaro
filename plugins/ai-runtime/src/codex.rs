@@ -42,7 +42,8 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
         "-c",
         "features.js_repl=false",
     ]);
-    if job.native_subagents() {
+    let native = job.native_profile();
+    if let Some(native) = native {
         command.args([
             "-c",
             "features.multi_agent_v2=false",
@@ -52,12 +53,12 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             "agents.max_depth=1",
         ]);
         command.env(
-            subagents::MCP_TOKEN_ENV,
+            native.codex_mcp_token_env,
             &job.request.mcp.as_ref().unwrap().token,
         );
     }
     let process = Process::spawn(&mut command, &job.request.working_dir)?;
-    process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"rpshop","title":"Ingenaro","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}}))?;
+    process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":job.request.host.client_id,"title":job.request.host.name,"version":job.request.host.version},"capabilities":{"experimentalApi":true}}}))?;
     let mut thread = String::new();
     let mut text_blocks: HashMap<String, PublicText> = HashMap::new();
     let mut reasoning = ReasoningStream::default();
@@ -107,7 +108,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 {
                     return Err("Cannot safely disable inherited Codex MCP server".into());
                 }
-                if !job.native_subagents() || name != subagents::MCP_NAME {
+                if native.is_none_or(|profile| name != profile.codex_mcp_name) {
                     server_overrides.insert(format!("mcp_servers.{name}.enabled"), json!(false));
                 }
             }
@@ -116,14 +117,14 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 continue;
             }
             let mut params = thread_params(job);
-            if job.native_subagents() {
+            if let Some(native) = native {
                 let mcp = job.request.mcp.as_ref().unwrap();
-                // Ingenaro handles consent for its authenticated, turn-scoped tools.
+                // The editor handles consent for its authenticated, turn-scoped tools.
                 server_overrides.insert(
-                    format!("mcp_servers.{}", subagents::MCP_NAME),
+                    format!("mcp_servers.{}", native.codex_mcp_name),
                     json!({
                         "url": mcp.endpoint,
-                        "bearer_token_env_var": subagents::MCP_TOKEN_ENV,
+                        "bearer_token_env_var": native.codex_mcp_token_env,
                         "enabled": true,
                         "default_tools_approval_mode": "approve",
                     }),
@@ -264,8 +265,9 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                 if params["threadId"].as_str() != Some(&thread) {
                     if job.native_subagents() {
                         let result = dynamic_result(
-                            json!({"error":"Use the rpshop_live MCP tools in the assigned subagent"}),
+                            json!({"error":"Use the scoped MCP tools in the assigned subagent"}),
                             true,
+                            job.request.host.image_result_field,
                         );
                         process.send(json!({"id":frame["id"],"result":result}))?;
                         continue;
@@ -281,13 +283,13 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                     .ok_or("Codex tool call had no call ID")?
                     .to_owned();
                 let (result, is_error) = job.call_tool(id, name, params["arguments"].clone())?;
-                process.send(json!({"id":frame["id"],"result":dynamic_result(result,is_error)}))?;
+                process.send(json!({"id":frame["id"],"result":dynamic_result(result,is_error,job.request.host.image_result_field)}))?;
             }
             "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-                // Ingenaro edits the open in-memory document, never the filesystem.
+                // Project edits go through the host tools.
                 process.send(json!({"id":frame["id"],"result":{"decision":"decline"}}))?;
                 job.emit(AiEvent::State {
-                    state: "Filesystem/command request denied; use Ingenaro tools".into(),
+                    state: "Filesystem/command request denied; use host tools".into(),
                 });
             }
             "item/permissions/requestApproval" => {
@@ -315,7 +317,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             "" => {}
             _ => {
                 if frame.get("id").is_some() {
-                    process.send(json!({"id":frame["id"],"error":{"code":-32601,"message":"Unsupported Ingenaro client request"}}))?;
+                    process.send(json!({"id":frame["id"],"error":{"code":-32601,"message":"Unsupported host client request"}}))?;
                 }
             }
         }
@@ -447,7 +449,7 @@ impl ReasoningStream {
 }
 
 fn thread_params(job: &Job) -> Value {
-    let mut params = json!({"cwd":job.request.working_dir,"sandbox":"read-only","approvalPolicy":"untrusted","developerInstructions":"Use only the supplied Ingenaro tools. Never edit project files directly. Ingenaro requires explicit approval for document changes."});
+    let mut params = json!({"cwd":job.request.working_dir,"sandbox":"read-only","approvalPolicy":"untrusted","developerInstructions":"Use only the supplied host tools. Never edit project files directly. Respect the editor’s approval rules for document changes."});
     if !job.design_tools() {
         params["ephemeral"] = json!(true);
         params["developerInstructions"] = if job.is_palette() {
@@ -457,10 +459,8 @@ fn thread_params(job: &Job) -> Value {
         } else {
             json!(&job.request.context)
         };
-    } else if job.native_subagents() {
-        params["developerInstructions"] = json!(
-            "Use Ingenaro tools for the live prototype. Put all independent page assignments in a single plan and spawn every assigned native subagent before calling wait. Do single-group and dependent work directly. Children use the rpshop_live MCP server and edit only assigned pages. Report their actual results in the parent conversation."
-        );
+    } else if let Some(native) = job.native_profile() {
+        params["developerInstructions"] = json!(native.codex_instructions);
     }
     if !job.request.config.model.is_empty() {
         params["model"] = json!(job.request.config.model);
@@ -470,10 +470,10 @@ fn thread_params(job: &Job) -> Value {
 fn dynamic_tools(tools: Value) -> Value {
     Value::Array(tools.as_array().into_iter().flatten().map(|tool| json!({"type":"function","name":tool["name"],"description":tool["description"],"inputSchema":tool["inputSchema"]})).collect())
 }
-fn dynamic_result(result: Value, is_error: bool) -> Value {
-    if let Some(url) = result.get("_rpshop_image").and_then(Value::as_str) {
+fn dynamic_result(result: Value, is_error: bool, image_field: &str) -> Value {
+    if let Some(url) = result.get(image_field).and_then(Value::as_str) {
         let mut metadata = result.clone();
-        metadata.as_object_mut().unwrap().remove("_rpshop_image");
+        metadata.as_object_mut().unwrap().remove(image_field);
         json!({"contentItems":[{"type":"inputText","text":metadata.to_string()},{"type":"inputImage","imageUrl":url}],"success":!is_error})
     } else {
         json!({"contentItems":[{"type":"inputText","text":result.to_string()}],"success":!is_error})
@@ -485,8 +485,9 @@ mod tests {
     #[test]
     fn dynamic_reference_image_is_sent_as_image_content() {
         let result = dynamic_result(
-            json!({"name":"screen.png","_rpshop_image":"data:image/png;base64,YWJj"}),
+            json!({"name":"screen.png","image_data":"data:image/png;base64,YWJj"}),
             false,
+            "image_data",
         );
         assert_eq!(
             result["contentItems"][1],
@@ -502,7 +503,9 @@ mod tests {
 
     #[test]
     fn schema_0147_dynamic_tools_have_required_type_and_input_schema() {
-        let tools = dynamic_tools(crate::automation::tools());
+        let tools = dynamic_tools(
+            json!([{"name":"read_document","description":"Read the document","inputSchema":{"type":"object"}}]),
+        );
         assert!(!tools.as_array().unwrap().is_empty());
         for tool in tools.as_array().unwrap() {
             assert_eq!(tool["type"], "function");
@@ -547,7 +550,7 @@ mod tests {
     }
     #[test]
     fn dynamic_response_is_codex_content_items_not_mcp_content() {
-        let result = dynamic_result(json!({"ok":true}), false);
+        let result = dynamic_result(json!({"ok":true}), false, "image_data");
         assert_eq!(result["contentItems"][0]["type"], "inputText");
         assert_eq!(result["success"], true);
     }

@@ -13,18 +13,18 @@ try {
     # use Cargo's configured registry without injecting a machine-specific mirror.
     switch ($Task) {
         'run' { Invoke-ShopCargo -CargoArguments (@('run', '--locked', '--') + $AppArguments) }
-        'check' { Invoke-ShopCargo -CargoArguments @('check', '--locked', '--all-targets') }
-        'test' { Invoke-ShopCargo -CargoArguments @('test', '--locked') }
+        'check' { Invoke-ShopCargo -CargoArguments @('check', '--workspace', '--locked', '--all-targets') }
+        'test' { Invoke-ShopCargo -CargoArguments @('test', '--workspace', '--locked') }
         'build' { Invoke-ShopCargo -CargoArguments @('build', '--locked') }
         'release' { Invoke-ShopCargo -CargoArguments @('build', '--locked', '--release') }
-        'clippy' { Invoke-ShopCargo -CargoArguments @('clippy', '--locked', '--all-targets', '--', '-D', 'warnings') }
+        'clippy' { Invoke-ShopCargo -CargoArguments @('clippy', '--workspace', '--locked', '--all-targets', '--', '-D', 'warnings') }
         'fmt' { Invoke-ShopCargo -CargoArguments @('fmt', '--all', '--check') }
         'demo' { Invoke-ShopCargo -CargoArguments @('run', '--locked', '--', '--export-demo', 'examples') }
         'screenshot' { Invoke-ShopCargo -CargoArguments @('run', '--locked', '--', '--screenshot', 'docs/screenshots/editor.png') }
         'verify' {
             Invoke-ShopCargo -CargoArguments @('fmt', '--all', '--check')
-            Invoke-ShopCargo -CargoArguments @('clippy', '--locked', '--all-targets', '--', '-D', 'warnings')
-            Invoke-ShopCargo -CargoArguments @('test', '--locked')
+            Invoke-ShopCargo -CargoArguments @('clippy', '--workspace', '--locked', '--all-targets', '--', '-D', 'warnings')
+            Invoke-ShopCargo -CargoArguments @('test', '--workspace', '--locked')
         }
     }
 } finally {

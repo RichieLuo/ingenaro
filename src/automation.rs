@@ -12,23 +12,17 @@ mod stdio;
 pub use bridge::{ToolClient, ToolHost, ToolRequest};
 pub use reference_files::{MAX_REFERENCE_BYTES, MAX_REFERENCE_FILES, ReferenceFile};
 pub use schema::{
-    DESIGN_PAGES_TOOL, EDIT_PAGE_TOOL, MAX_PAGE_SUBAGENTS, MIN_PAGE_SUBAGENTS, tools,
+    DESIGN_PAGES_TOOL, EDIT_PAGE_TOOL, LIST_PLUGINS_TOOL, MAX_PAGE_SUBAGENTS, MIN_PAGE_SUBAGENTS,
+    OPEN_PLUGIN_MANAGER_TOOL, tools,
 };
 pub use server::{Server, start};
 pub use stdio::run_stdio;
 
 use crate::grouping::{Layer, layers};
 use crate::model::{Page, Project, Widget};
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// One call against the document currently owned by the GUI thread.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ToolCall {
-    pub name: String,
-    #[serde(default = "empty_object")]
-    pub arguments: Value,
-}
+pub use ai_design_runtime::ToolCall;
 
 fn empty_object() -> Value {
     json!({})
@@ -120,6 +114,11 @@ fn execute_inner(
                     "read_tool": "rpshop_read_pages",
                     "id_type": "string"
                 },
+                "plugins": if page_only { Value::Null } else { json!({
+                    "list_tool":LIST_PLUGINS_TOOL,
+                    "open_tool":OPEN_PLUGIN_MANAGER_TOOL,
+                    "install_requires_user":true
+                }) },
                 "responsive_layout": {
                     "available":!native,
                     "canvas":"ResponsiveWidth",

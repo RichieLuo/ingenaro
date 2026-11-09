@@ -33,9 +33,9 @@ jobs:
         run: .\scripts\dev.ps1 verify
       - run: cargo fmt --all --check
         if: runner.os != 'Windows'
-      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --workspace --locked --all-targets -- -D warnings
         if: runner.os != 'Windows'
-      - run: cargo test --locked
+      - run: cargo test --workspace --locked
         if: runner.os != 'Windows'
       - run: python -m unittest discover -s scripts/tests -v
       - run: python scripts/check-structure.py

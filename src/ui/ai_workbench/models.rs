@@ -178,17 +178,16 @@ impl App {
                 }
                 self.ai_request_models(&id, true);
             }
-            let selected =
-                self.ai.settings.engines.iter().any(|engine| {
-                    engine.id == self.ai.selected_engine && ai::is_local(engine.kind)
-                });
+            let selected = self.ai.settings.engines.iter().any(|engine| {
+                engine.id == self.ai.selected_engine && ai::is_desktop_engine(engine.kind)
+            });
             if !selected {
                 self.ai.selected_engine = self
                     .ai
                     .settings
                     .engines
                     .iter()
-                    .filter(|engine| ai::is_local(engine.kind))
+                    .filter(|engine| ai::is_desktop_engine(engine.kind))
                     .find(|engine| {
                         self.ai
                             .local_status
@@ -200,7 +199,7 @@ impl App {
                             .settings
                             .engines
                             .iter()
-                            .find(|engine| ai::is_local(engine.kind))
+                            .find(|engine| ai::is_desktop_engine(engine.kind))
                     })
                     .map(|engine| engine.id.clone())
                     .unwrap_or_default();
@@ -218,7 +217,7 @@ impl App {
                             .settings
                             .engines
                             .iter()
-                            .any(|engine| &engine.id == id && ai::is_local(engine.kind))
+                            .any(|engine| &engine.id == id && ai::is_desktop_engine(engine.kind))
                     })
                 {
                     self.ai.settings.default_engine_id = Some(self.ai.selected_engine.clone());
@@ -258,6 +257,16 @@ impl App {
         id: &str,
         current: &str,
     ) -> Option<String> {
+        if self
+            .ai
+            .settings
+            .engines
+            .iter()
+            .any(|engine| engine.id == id && engine.kind == ai::EngineKind::Plugin)
+        {
+            ui.label("模型由自定义引擎选择");
+            return None;
+        }
         self.ai_request_models(id, false);
         let mut selected = None;
         let mut refresh = false;
@@ -332,6 +341,15 @@ impl App {
         selected
     }
     pub(super) fn ai_model_display(&self, id: &str, model: &str) -> String {
+        if self
+            .ai
+            .settings
+            .engines
+            .iter()
+            .any(|engine| engine.id == id && engine.kind == ai::EngineKind::Plugin)
+        {
+            return "引擎默认模型".into();
+        }
         if model.is_empty() {
             return "CLI 默认模型".into();
         }

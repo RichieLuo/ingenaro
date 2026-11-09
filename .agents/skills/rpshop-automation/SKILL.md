@@ -5,7 +5,7 @@ description: Inspect or edit a live Ingenaro prototype with Ingenaro tools. Use 
 
 # Ingenaro live editing
 
-In Ingenaro's AI Design menu, open **外部 API / MCP** and enable MCP for the current project. Use **复制 MCP 配置（含临时密钥）** to configure an external client. Keep the temporary bearer token in the client configuration. Built-in AI receives the tools directly.
+In Ingenaro's **文件** menu, open **外部 API / MCP** and enable MCP for the current project. Use **复制 MCP 配置（含临时密钥）** to configure an external client. Keep the temporary bearer token in the client configuration. Built-in AI receives the tools directly. The optional `ingenaro --mcp-stdio` bridge accepts `INGENARO_MCP_TOKEN` and the legacy `RPSHOP_MCP_TOKEN` alias.
 
 1. Discover the available tools with MCP `tools/list` or the host's supplied definitions. Call `rpshop_capabilities` to check format, write limits and scope. Use the live tools for document work and the host dialogs for opening, saving and exporting files.
 2. Read the relevant live state with `rpshop_read_pages`, `rpshop_read_layers`, `rpshop_read_widgets`, `rpshop_read_styles`, or `rpshop_read_interactions`. Page and widget IDs are positive numbers. Folder IDs are strings. An empty `page_tree` means that all pages are at the root.
@@ -33,3 +33,11 @@ Page-local workers edit the assigned page. The coordinating session handles dire
 - Use `rpshop_read_view` and `rpshop_set_view` for selection and the viewport. Use `rpshop_history` when the user requests undo or redo. The editor maintains the shared history.
 - Use `rpshop_open_project` or `rpshop_new_project` when the user requests a project switch. The host handles unsaved changes. Start a new turn after a successful switch.
 - Use `rpshop_preview`, `rpshop_save`, `rpshop_export`, and `rpshop_publish_html` according to the requested deliverable. Respect tool approvals and report any cancelled or pending dialog as such.
+
+## Application plugins
+
+Use `ingenaro_list_plugins` with `{}` to read the application plugin catalog and installation state. Call `ingenaro_open_plugin_manager` with `{}` to open **添加插件** after approval. The user chooses **AI 工具** in the catalog. The tool returns whether the catalog opened. Read the inventory again to check whether the user added the plugin.
+
+Inside the AI Tool, users can configure a trusted custom engine. It receives its per-turn inventory in the `start` frame. Use the supplied live tools and wait for each `tool_result`. The host applies project, permission, cancellation and undo rules. Page delegation is available when the inventory includes the delegation tools.
+
+The host queues user submissions made with Send or Enter. A user can steer a running turn from the queued message's **引导对话** control. The host removes that entry when the engine acknowledges receipt.

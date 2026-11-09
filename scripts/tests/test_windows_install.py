@@ -170,6 +170,24 @@ class WindowsInstallTests(unittest.TestCase):
         self.assertEqual(arguments[arguments.index("-ShortcutPath") + 1], str(shortcut))
         self.assertEqual(shortcut.name, "SQLShop.lnk")
 
+    def test_ingenaro_installs_independently_and_reuses_a_legacy_launcher_on_update(self):
+        local = self.root / "local"
+        programs = local / "Programs"
+        legacy = programs / "Shop" / "Ingenaro"
+        standalone = programs / "Ingenaro"
+        with patch.dict(os.environ, {"LOCALAPPDATA": str(local), "APPDATA": str(self.root / "roaming")}), \
+                patch.object(installer.subprocess, "run"):
+            self.assertEqual(installer.install_home("Ingenaro"), standalone)
+            legacy.mkdir(parents=True)
+            (legacy / "install-state.json").write_text("{}", encoding="utf-8")
+            self.assertEqual(installer.install_home("Ingenaro"), legacy)
+            state = installer.install_package(self.package("ingenaro", name="ingenaro"), integrate=False)
+            launcher = Path(state["launcher"])
+            self.assertEqual(launcher, legacy / "Ingenaro.exe")
+            shortcut = installer.create_shortcut("Ingenaro", launcher, Path(state["payload"]))
+            self.assertEqual(shortcut.parent.name, "Programs")
+            self.assertEqual(shortcut.name, "Ingenaro.lnk")
+
     @unittest.skipUnless(os.name == "nt", "automatic installation is Windows only")
     def test_refresh_only_updates_this_repository_after_first_explicit_install(self):
         package = self.package("first")

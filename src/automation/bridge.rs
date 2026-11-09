@@ -100,6 +100,11 @@ impl ToolClient {
         self
     }
 
+    pub fn with_single_design(mut self) -> Self {
+        self.tool_set = ToolSet::SingleDesign;
+        self
+    }
+
     pub fn with_reference_files(mut self, files: Vec<ReferenceFile>) -> Self {
         self.reference_files = files.into();
         self
@@ -235,5 +240,19 @@ impl ToolClient {
         } else {
             Ok(())
         }
+    }
+}
+
+impl ai_design_runtime::ToolClient for ToolClient {
+    fn tool_definitions(&self) -> Value {
+        ToolClient::tool_definitions(self)
+    }
+
+    fn supports_tool(&self, name: &str) -> bool {
+        ToolClient::supports_tool(self, name)
+    }
+
+    fn call(&self, call: ToolCall, interrupted: &Arc<AtomicBool>) -> Result<Value, String> {
+        self.call_until(call, interrupted, CALL_TIMEOUT)
     }
 }

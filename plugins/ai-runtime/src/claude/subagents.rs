@@ -1,11 +1,9 @@
 use super::*;
-use crate::ai::{SubagentState, page_agent_label};
-use crate::automation::EDIT_PAGE_TOOL;
+use crate::{NativeDesign, SubagentState, page_agent_label};
 
-const PAGE_AGENT: &str = "rpshop-page";
-
-pub(super) fn definitions(job: &Job) -> Value {
-    let mut coordinator = vec![format!("Agent({PAGE_AGENT})")];
+pub(super) fn definitions(job: &Job, native: &NativeDesign) -> Value {
+    let server = job.request.host.claude_mcp_name;
+    let mut coordinator = vec![format!("Agent({})", native.claude_page_agent)];
     coordinator.extend(
         job.request
             .tools
@@ -16,38 +14,31 @@ pub(super) fn definitions(job: &Job) -> Value {
             .filter_map(|tool| {
                 tool["name"]
                     .as_str()
-                    .map(|name| format!("mcp__rpshop__{name}"))
+                    .map(|name| format!("mcp__{server}__{name}"))
             }),
     );
-    let page_tools: Vec<_> = [
-        "rpshop_capabilities",
-        "rpshop_read_pages",
-        "rpshop_read_layers",
-        "rpshop_read_widgets",
-        "rpshop_read_styles",
-        "rpshop_read_interactions",
-        "rpshop_read_library",
-        EDIT_PAGE_TOOL,
-    ]
-    .map(|name| format!("mcp__rpshop__{name}"))
-    .into();
+    let page_tools: Vec<_> = native
+        .claude_page_tools
+        .iter()
+        .map(|name| format!("mcp__{server}__{name}"))
+        .collect();
     json!({
-        "rpshop-coordinator": {
-            "description":"Coordinates live page design in the current Ingenaro conversation.",
-            "prompt":"Design the open prototype using the Ingenaro tools. For independent pages, prepare one plan for the whole turn and call the rpshop-page Agent once per assignment in the same assistant message, with run_in_background set to true. Launch all groups before waiting and wait for every completion notification before replying. Do single-group and dependent work directly. Summarize the actual results in this conversation.",
+        (native.claude_coordinator): {
+            "description":"Coordinates live page design in the current conversation.",
+            "prompt":native.claude_coordinator_prompt,
             "model":"inherit", "tools":coordinator
         },
-        PAGE_AGENT: {
-            "description":"Designs the native Ingenaro pages assigned by the coordinator.",
-            "prompt":"Work on the page IDs listed in your assignment. Read each page explicitly and edit it with rpshop_edit_assigned_page using its page_id. Apply complete batches of real editable widgets. Follow the shared design rules, leave other pages alone, and report what was applied.",
-            "model":"inherit", "background":true, "tools":page_tools, "mcpServers":["rpshop"]
+        (native.claude_page_agent): {
+            "description":"Designs the native pages assigned by the coordinator.",
+            "prompt":native.claude_page_prompt,
+            "model":"inherit", "background":true, "tools":page_tools, "mcpServers":[server]
         }
     })
 }
 
-pub(super) fn allowed_call(name: &str, arguments: &Value) -> bool {
+pub(super) fn allowed_call(native: &NativeDesign, name: &str, arguments: &Value) -> bool {
     matches!(name, "Agent" | "Task")
-        && arguments["subagent_type"] == PAGE_AGENT
+        && arguments["subagent_type"] == native.claude_page_agent
         && arguments["run_in_background"] != false
         && arguments["isolation"].is_null()
         && arguments["team_name"].is_null()
@@ -66,7 +57,7 @@ struct Agent {
 }
 
 impl Observer {
-    pub(super) fn observe(&mut self, job: &Job, frame: &Value) {
+    pub(super) fn observe(&mut self, job: &Job, native: &NativeDesign, frame: &Value) {
         if let Some(parent) = frame["parent_tool_use_id"].as_str() {
             self.update(job, parent, SubagentState::Running);
             return;
@@ -79,7 +70,7 @@ impl Observer {
                     };
                     let input = &block["input"];
                     if block["type"] != "tool_use"
-                        || !allowed_call(block["name"].as_str().unwrap_or_default(), input)
+                        || !allowed_call(native, block["name"].as_str().unwrap_or_default(), input)
                         || self.agents.contains_key(id)
                         || self.agents.len() >= 128
                     {

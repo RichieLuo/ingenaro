@@ -49,6 +49,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai-design-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "directories",
+ "image",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "android-activity"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1871,6 +1886,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ingenaro"
+version = "1.0.0"
+dependencies = [
+ "ai-design-runtime",
+ "anyhow",
+ "arboard",
+ "base64 0.22.1",
+ "directories",
+ "eframe",
+ "egui_commonmark",
+ "flate2",
+ "image",
+ "keyring",
+ "lz4_flex",
+ "pulldown-cmark",
+ "raw-window-handle",
+ "reqwest",
+ "rfd",
+ "serde",
+ "serde_json",
+ "uuid",
+ "windows-sys 0.61.2",
+ "winres",
+ "wry",
+ "zip",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3198,33 +3241,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "unicode-ident",
-]
-
-[[package]]
-name = "ingenaro"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "arboard",
- "base64 0.22.1",
- "directories",
- "eframe",
- "egui_commonmark",
- "flate2",
- "image",
- "keyring",
- "lz4_flex",
- "pulldown-cmark",
- "raw-window-handle",
- "reqwest",
- "rfd",
- "serde",
- "serde_json",
- "uuid",
- "windows-sys 0.61.2",
- "winres",
- "wry",
- "zip",
 ]
 
 [[package]]

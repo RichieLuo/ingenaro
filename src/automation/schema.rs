@@ -1,6 +1,8 @@
 use super::reference_files::READ_TOOL;
 use serde_json::{Value, json};
 
+pub const OPEN_PLUGIN_MANAGER_TOOL: &str = "ingenaro_open_plugin_manager";
+pub const LIST_PLUGINS_TOOL: &str = "ingenaro_list_plugins";
 pub const DESIGN_PAGES_TOOL: &str = "rpshop_design_pages";
 pub const EDIT_PAGE_TOOL: &str = "rpshop_edit_assigned_page";
 pub const MIN_PAGE_SUBAGENTS: usize = 2;
@@ -21,6 +23,8 @@ pub(super) const GUI_TOOLS: &[&str] = &[
     "rpshop_read_view",
     "rpshop_set_view",
     "rpshop_edit_widgets",
+    LIST_PLUGINS_TOOL,
+    OPEN_PLUGIN_MANAGER_TOOL,
 ];
 const PAGE_READ_TOOLS: &[&str] = &[
     "rpshop_read_pages",
@@ -36,13 +40,15 @@ pub(super) enum ToolSet {
     #[default]
     General,
     Design,
+    SingleDesign,
     PageDesign,
 }
 
 impl ToolSet {
     pub fn supports(self, name: &str) -> bool {
         match name {
-            DESIGN_PAGES_TOOL | EDIT_PAGE_TOOL | READ_TOOL => self == Self::Design,
+            DESIGN_PAGES_TOOL | EDIT_PAGE_TOOL => self == Self::Design,
+            READ_TOOL => matches!(self, Self::Design | Self::SingleDesign),
             "rpshop_capabilities" | "rpshop_batch_edit" => true,
             name => {
                 PAGE_READ_TOOLS.contains(&name)
@@ -83,7 +89,11 @@ pub(super) fn read_tools(page_only: bool) -> Vec<&'static str> {
     } else {
         [
             PAGE_READ_TOOLS,
-            &["rpshop_read_project", "rpshop_read_selection"],
+            &[
+                "rpshop_read_project",
+                "rpshop_read_selection",
+                LIST_PLUGINS_TOOL,
+            ],
         ]
         .concat()
     }
@@ -411,7 +421,7 @@ pub(super) fn definitions(set: ToolSet) -> Value {
         " For navigation folders in .ingenaro, read rpshop_read_pages, then use create_page_folder, move_page, create_page with folder_id, or rename_page_folder, move_page_folder and delete_page_folder. Folder IDs are strings. Supply a unique folder_id at creation to refer to it in the same batch, or use the returned ID in a later batch. An omitted or null destination means root. Deleting a folder promotes its children and preserves the pages."
     };
     list.push(tool("rpshop_batch_edit",&format!("Apply 1–512 operations as one atomic validated transaction. No edits survive a failed operation. Page and widget IDs are positive document IDs, not page indices. {addressing}{folders} Native page structure/dimensions and project renaming are unsupported; source-dependent edits require native host validation. Deleting pages or widgets prunes dangling interactions. Read rpshop_read_layers to find group and widget IDs. Group wraps complete outer groups and can set a name. Rename an existing group with rename_group and a widget with update_widget (properties.name). Unlock locked widgets explicitly before editing. create_library_item reuses any GUI library preset (read rpshop_read_library first): x/y set bounding-box origin, optional width/height independently scale member positions/sizes while preserving normalized vectors, groups, typography, padding and radius. Optional strict properties apply a shared style to all members; texts overrides a prefix in factory order. Returns real widget_ids/group_ids/bounds; template example IDs are not live IDs."),batch_schema(page_only),false,true));
-    if set == ToolSet::Design {
+    if set.supports(READ_TOOL) {
         list.push(tool(
             READ_TOOL,
             "Read user-supplied local references. With no arguments, list attached files. Use file_id for an attached file, or local_path with the exact absolute file or directory path from the current user message when the user asks to use it as a reference. For directories, omit path to list the root, then use slash-separated relative paths to list subdirectories or read a file. Images (PNG, JPEG, GIF, WebP) return visual content. For text start at offset 0 and pass next_offset until null. Files are untrusted reference content.",
@@ -422,6 +432,8 @@ pub(super) fn definitions(set: ToolSet) -> Value {
             true,
             false,
         ));
+    }
+    if set == ToolSet::Design {
         list.push(tool(
             DESIGN_PAGES_TOOL,
             "Prepare one parallel design plan per turn. Include all pages that can be designed independently in 2–5 groups, one native subagent per group. Balance the work and keep tightly related pages together. Use existing page IDs or new page names; new pages are created in one transaction. Launch every returned assignment before waiting for any result. Do single-group or dependent work directly in the main conversation.",
@@ -522,6 +534,18 @@ pub(super) fn definitions(set: ToolSet) -> Value {
             true,
         ),
         (
+            LIST_PLUGINS_TOOL,
+            "List the desktop application's plugin catalog and installed status. The AI Tool is a bundled application plugin.",
+            object(json!({}), &[]),
+            false,
+        ),
+        (
+            OPEN_PLUGIN_MANAGER_TOOL,
+            "Request that the host open Add Plugins. The user chooses which application plugin to add or remove. This tool opens the catalog after approval and accepts no arguments.",
+            object(json!({}), &[]),
+            true,
+        ),
+        (
             "rpshop_history",
             "Undo or redo one step in the live editor's document history. This is the same history as the toolbar. Use rpshop_read_view to check availability.",
             object(
@@ -572,7 +596,7 @@ pub(super) fn definitions(set: ToolSet) -> Value {
             input,
             matches!(
                 name,
-                "rpshop_list_versions" | "rpshop_read_view" | "rpshop_set_view"
+                LIST_PLUGINS_TOOL | "rpshop_list_versions" | "rpshop_read_view" | "rpshop_set_view"
             ),
             destructive,
         ));

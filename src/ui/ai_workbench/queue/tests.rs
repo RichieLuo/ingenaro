@@ -1,5 +1,5 @@
 use super::*;
-use crate::ui::tests::{fixture, frame};
+use crate::ui::tests::{click, fixture, frame};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -89,6 +89,12 @@ fn respond(stream: &mut TcpStream, text: &str) {
 }
 #[test]
 fn running_followup_waits_then_executes_with_its_own_image_and_frozen_reference() {
+    for keyboard in [false, true] {
+        submit_followup_from_composer(keyboard);
+    }
+}
+
+fn submit_followup_from_composer(keyboard: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
@@ -127,6 +133,7 @@ fn running_followup_waits_then_executes_with_its_own_image_and_frozen_reference(
         }
     });
     let mut app = fixture(Project::default());
+    app.ai.visible = true;
     let mut engine = ai::EngineConfig::new(ai::EngineKind::OpenAiCompatible);
     engine.model = "mock".into();
     engine.api_base = Some(format!("http://{address}/v1"));
@@ -144,14 +151,33 @@ fn running_followup_waits_then_executes_with_its_own_image_and_frozen_reference(
         .images
         .push(ai::ImageAttachment::from_rgba("queued-image", 1, 1, &[255, 0, 0, 255]).unwrap());
     app.ai.prompt = "第二条看图修改引用元件".into();
-    app.ai_submit();
-    assert_eq!(app.ai.queue.len(), 1);
+    let context = egui::Context::default();
+    frame(&mut app, &context, vec![]);
+    if keyboard {
+        context.memory_mut(|memory| memory.request_focus(app.ai.prompt_editor_id.unwrap()));
+        frame(
+            &mut app,
+            &context,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: Some(egui::Key::Enter),
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    } else {
+        let send = composer::toolbar::control_bounds(&context, "send").center();
+        click(&mut app, &context, send);
+    }
+    assert_eq!(app.ai.queue.len(), 1, "keyboard={keyboard}");
+    assert!(app.ai.prompt.is_empty());
     assert!(app.ai.images.is_empty());
+    assert!(app.ai.steering.is_none());
     assert!(observed.try_recv().is_err());
     app.selected.clear();
     app.project.pages[0].widgets[0].name = "别的名字".into();
     release_tx.send(()).unwrap();
-    let context = egui::Context::default();
     let deadline = Instant::now() + Duration::from_secs(8);
     while (app.ai.running.is_some() || app.ai.queue.len() > 0) && Instant::now() < deadline {
         frame(&mut app, &context, vec![]);

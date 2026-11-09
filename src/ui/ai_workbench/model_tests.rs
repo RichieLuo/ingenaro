@@ -88,7 +88,7 @@ fn ai_sidebar_width_changes_when_dragging_its_left_edge() {
 }
 
 #[test]
-fn settings_offer_only_local_agents_and_preserve_hidden_api_configuration() {
+fn settings_offer_local_and_custom_engines_and_preserve_hidden_api_configuration() {
     let mut app = app();
     let old = ai::EngineConfig::new(ai::EngineKind::OpenAiCompatible);
     let old_id = old.id.clone();
@@ -97,7 +97,8 @@ fn settings_offer_only_local_agents_and_preserve_hidden_api_configuration() {
     let context = egui::Context::default();
     frame(&mut app, &context, vec![]);
     let output = frame(&mut app, &context, vec![]);
-    assert!(text_center(&output, "本地智能体").y > 0.0);
+    assert!(text_center(&output, "AI 引擎").y > 0.0);
+    assert!(text_center(&output, "添加自定义引擎…").y > 0.0);
     assert!(
         app.ai
             .settings

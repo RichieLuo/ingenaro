@@ -399,8 +399,12 @@ fn check_native_fixture(variable: &str, legacy: bool) {
         renamed.pages[pair.0].group_name(group_id),
         "Ingenaro named group"
     );
-    crate::grouping::rename_group(&mut renamed.pages[pair.0], group_id, "Ingenaro renamed group")
-        .unwrap();
+    crate::grouping::rename_group(
+        &mut renamed.pages[pair.0],
+        group_id,
+        "Ingenaro renamed group",
+    )
+    .unwrap();
     native.save(&renamed, &destination).unwrap();
     assert!(
         native.project.pages[pair.0]

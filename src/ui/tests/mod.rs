@@ -2,6 +2,8 @@ mod native_sessions;
 
 mod persistence;
 
+mod plugin_manager;
+
 mod canvas_editing;
 
 mod editing;
@@ -44,6 +46,7 @@ impl eframe::Storage for MemoryStorage {
 
 pub(super) fn fixture(project: Project) -> App {
     App {
+        plugins: plugins::Plugins::from_legacy(true),
         ai: ai_workbench::Workbench::new(false, "test-document".into()),
         ai_reveal: Default::default(),
         saved: project.clone(),

@@ -103,6 +103,7 @@ impl App {
     pub(super) fn ai_auto_tool(&self, request: &automation::ToolRequest) -> bool {
         self.ai_has_full_permission()
             && self.ai_builtin_request(request)
+            && request.call.name != automation::OPEN_PLUGIN_MANAGER_TOOL
             && known_tool(&request.call.name).is_some()
     }
     pub(super) fn ai_engine_permission(

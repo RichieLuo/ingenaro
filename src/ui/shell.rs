@@ -173,6 +173,10 @@ impl App {
                             self.export_file(true);
                             ui.close();
                         }
+                        if ui.button("外部 API / MCP…").clicked() {
+                            self.ai_open_external_window();
+                            ui.close();
+                        }
                         if ui.button("打开欢迎示例").clicked() {
                             self.request_replace("demo");
                             ui.close();
@@ -237,6 +241,9 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("?").clicked() {
                             self.help = true;
+                        }
+                        if ui.button("添加插件").clicked() {
+                            self.plugins.open = true;
                         }
                         ui.menu_button("视图", |ui| {
                             for (label, command) in [

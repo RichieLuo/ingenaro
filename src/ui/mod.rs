@@ -13,6 +13,7 @@ mod file_open;
 mod keyboard;
 mod layers;
 mod library;
+mod plugins;
 mod preview;
 mod shell;
 mod startup;
@@ -268,6 +269,7 @@ fn load_document(path: &std::path::Path) -> anyhow::Result<OpenedDocument> {
 }
 
 pub struct App {
+    plugins: plugins::Plugins,
     ai: ai_workbench::Workbench,
     ai_reveal: ai_reveal::DesignReveal,
     project: Project,
@@ -340,7 +342,8 @@ impl eframe::App for App {
                 }
             }
         }
-        if self.layer_name_dialog.is_none()
+        if !self.plugins.open
+            && self.layer_name_dialog.is_none()
             && self.page_folder_dialog.is_none()
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
@@ -364,6 +367,7 @@ impl eframe::App for App {
             && self.editing.is_none()
             && self.layer_name_dialog.is_none()
             && self.page_folder_dialog.is_none()
+            && !self.plugins.open
             && !self.ai_modal_active()
             && !self.ai_page_overview_visible()
         {
@@ -372,6 +376,7 @@ impl eframe::App for App {
         }
         if !self.screenshot_mode
             && self.confirm.is_none()
+            && !self.plugins.open
             && let Some(path) =
                 ctx.input(|i| i.raw.dropped_files.iter().find_map(|f| f.path.clone()))
         {
@@ -433,6 +438,7 @@ impl eframe::App for App {
         }
         self.ai_artifact_window(ctx, frame);
         self.ai_settings(ctx);
+        self.ai_external_window(ctx);
         self.ai_permissions(ctx);
         self.ai_full_permission_dialog(ctx);
         self.ai_image_preview(ctx);
@@ -440,6 +446,7 @@ impl eframe::App for App {
         self.show_layer_name_dialog(ctx);
         self.show_page_folder_dialog(ctx);
         self.dialogs(ctx);
+        self.plugin_manager(ctx);
         #[cfg(target_os = "windows")]
         window_chrome::paint_border(ctx);
         if !dragging && self.drag.is_none() && !self.history_changed {
@@ -481,6 +488,7 @@ impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         if !self.screenshot_mode {
             eframe::set_value(storage, sidebar::STORAGE_KEY, &self.sidebar_layout);
+            eframe::set_value(storage, plugins::STORAGE_KEY, &self.plugins);
             eframe::set_value(
                 storage,
                 "rpshop-session",

@@ -6,6 +6,14 @@ mod cli_tests;
 #[cfg(test)]
 mod tests;
 
+const QUEUE_HEADER_ROW_HEIGHT: f32 = 22.0;
+const QUEUE_ITEM_SPACING: f32 = 3.0;
+const QUEUE_ROW_HEIGHT: f32 = 30.0;
+
+fn queue_header_height(ui: &egui::Ui) -> f32 {
+    QUEUE_HEADER_ROW_HEIGHT + QUEUE_ITEM_SPACING + ui.spacing().item_spacing.y
+}
+
 #[derive(Clone)]
 pub(super) struct Submission {
     pub id: u64,
@@ -186,10 +194,6 @@ impl App {
         })
     }
     pub(super) fn ai_submit(&mut self) {
-        if self.ai.steering.is_some() {
-            self.ai.state = "引导正在等待引擎确认，请稍后再发送，避免重复提交".into();
-            return;
-        }
         let submission = match self.ai_capture_submission() {
             Ok(submission) => submission,
             Err(error) => {
@@ -212,23 +216,18 @@ impl App {
             self.ai.authorization.confirm_before_send();
             return;
         }
-        if self.ai.queue.len() == 0 && self.ai.running.is_none() {
+        if self.ai.queue.len() == 0 && self.ai.running.is_none() && self.ai.steering.is_none() {
             self.ai.queue.paused = false;
         }
-        if self.ai.running.is_some() || self.ai.queue.len() > 0 || self.ai.queue.paused {
-            match self.ai.queue.push(submission) {
-                Ok(_) => {
-                    self.ai.prompt.clear();
-                    self.ai.images.clear();
-                    self.ai.reference_files.files.clear();
-                    self.ai.state = format!("已加入队列 · {} 条待执行", self.ai.queue.len());
-                }
-                Err(error) => self.ai.state = error,
+        match self.ai.queue.push(submission) {
+            Ok(_) => {
+                self.ai.prompt.clear();
+                self.ai.images.clear();
+                self.ai.reference_files.files.clear();
+                self.ai.state = format!("已加入队列 · {} 条待执行", self.ai.queue.len());
+                self.ai_poll_queue();
             }
-        } else if self.ai_begin(submission) {
-            self.ai.prompt.clear();
-            self.ai.images.clear();
-            self.ai.reference_files.files.clear();
+            Err(error) => self.ai.state = error,
         }
     }
     pub(super) fn ai_poll_queue(&mut self) {
@@ -261,11 +260,12 @@ impl App {
             self.ai.queue.paused = true;
         }
     }
-    pub(super) fn ai_queue_height(&self) -> f32 {
-        if self.ai.queue.len() == 0 {
+    pub(super) fn ai_queue_height(&self, ui: &egui::Ui, available: f32) -> f32 {
+        let header = queue_header_height(ui);
+        if self.ai.queue.len() == 0 || available <= header {
             0.0
         } else {
-            26.0 + self.ai.queue.len().min(3) as f32 * 30.0
+            (header + self.ai.queue.len().min(3) as f32 * QUEUE_ROW_HEIGHT).min(available)
         }
     }
 
@@ -305,20 +305,17 @@ impl App {
         self.ai.state = "已恢复到输入框 · 再次发送时使用当前引用、模型和权限".into();
     }
 
-    pub(super) fn ai_queue_panel(&mut self, ui: &mut egui::Ui) {
-        if self.ai.queue.len() == 0 {
+    pub(super) fn ai_queue_panel(&mut self, ui: &mut egui::Ui, height: f32) {
+        if height == 0.0 {
             return;
         }
-        // The chat panel already reserved ai_queue_height() above the composer.
-        // Reserve only the remaining footer/header spacing here, not a second
-        // conversation-sized block that clips every pending row to zero height.
-        let list_height = self.ai.queue.len().min(3) as f32 * 30.0;
+        let list_height = height - queue_header_height(ui);
         let mut remove = None;
         let mut edit = None;
         let mut steer = None;
         ui.scope(|ui| {
-            ui.spacing_mut().item_spacing = vec2(4.0, 3.0);
-            ui.spacing_mut().interact_size.y = 22.0;
+            ui.spacing_mut().item_spacing = vec2(4.0, QUEUE_ITEM_SPACING);
+            ui.spacing_mut().interact_size.y = QUEUE_HEADER_ROW_HEIGHT;
             ui.spacing_mut().button_padding = vec2(4.0, 1.0);
             ui.horizontal(|ui| {
                 ui.label(
@@ -375,6 +372,7 @@ impl App {
                                         );
                                         let response = ui.add_enabled(
                                             self.ai.running.is_some()
+                                                && item.engine.kind != ai::EngineKind::Plugin
                                                 && self.ai.steering.is_none()
                                                 && !self.ai.page_agents.has_active()
                                                 && item.reference_files.is_empty(),

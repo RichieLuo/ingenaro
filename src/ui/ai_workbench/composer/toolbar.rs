@@ -30,6 +30,7 @@ impl App {
                 ai::EngineKind::Claude => "Claude",
                 ai::EngineKind::Codex => "Codex",
                 ai::EngineKind::OpenAiCompatible => "API",
+                ai::EngineKind::Plugin => &engine.name,
             })
             .unwrap_or("引擎");
         let id = self.ai.selected_engine.clone();
@@ -55,7 +56,7 @@ impl App {
         let effort = self.ai_current_effort(&id, &model);
         let effort_text = effort_label(effort);
         let labels = [
-            engine_name.to_owned(),
+            short_model(engine_name, 24),
             permission_label.into(),
             short_model(&model_name, 80),
         ];
@@ -137,8 +138,8 @@ impl App {
                     None,
                     if stop {
                         "停止设计任务"
-                    } else if running {
-                        "发送后续消息 · 选择发送方式"
+                    } else if running || self.ai.queue.len() > 0 {
+                        "加入消息队列"
                     } else {
                         "发送需求"
                     },
@@ -149,25 +150,9 @@ impl App {
                 if response.clicked() {
                     if stop {
                         self.ai_stop_design();
-                    } else if !running {
+                    } else {
                         send = true;
                     }
-                }
-                if running && ready {
-                    egui::Popup::menu(&response).show(|ui| {
-                        ui.set_max_width(230.0);
-                        if ui.button("排队发送").on_hover_text("保留当前引用和附件，当前任务完成后发送").clicked() {
-                            send = true;
-                            ui.close();
-                        }
-                        let has_files = !self.ai.reference_files.files.is_empty() || self.ai.reference_files.loading();
-                        if ui.add_enabled(!has_files && self.ai.steering.is_none() && !self.ai.page_agents.has_active(), egui::Button::new("引导当前对话"))
-                            .on_hover_text("将补充要求和图片交给正在运行的任务。附带参考文件时请使用排队发送。")
-                            .clicked() {
-                            self.ai_steer();
-                            ui.close();
-                        }
-                    });
                 }
             });
         });
@@ -184,7 +169,7 @@ impl App {
             .settings
             .engines
             .iter()
-            .filter(|engine| ai::is_local(engine.kind))
+            .filter(|engine| ai::is_desktop_engine(engine.kind))
         {
             if engine_icons::choice(
                 ui,

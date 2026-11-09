@@ -20,6 +20,8 @@ const ORANGE: Color32 = Color32::from_rgb(198, 116, 51);
 const SURFACE: Color32 = Color32::from_rgb(247, 248, 250);
 const RESIZE_GRIP_ID: &str = "ai-composer-resize-grip";
 const RESIZE_GRIP_SIZE: egui::Vec2 = vec2(46.0, 3.0);
+// Room outside the resizable body for the grip, frame spacing and shortcut footer.
+pub(super) const COMPOSER_CHROME_HEIGHT: f32 = 60.0;
 
 impl App {
     pub(super) fn ai_resize_composer(&mut self, ui: &egui::Ui, height_limit: f32) {
@@ -235,6 +237,7 @@ impl App {
                         egui::ScrollArea::vertical()
                             .id_salt("ai-input-scroll")
                             .max_height(height)
+                            .min_scrolled_height(0.0)
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
                                 let selection = input::selection_before_right_click(ui, editor_id);
@@ -335,7 +338,7 @@ impl App {
         });
     }
 
-    fn ai_composer_min_height(&self) -> f32 {
+    pub(super) fn ai_composer_min_height(&self) -> f32 {
         (36.0
             + toolbar::TOOLBAR_HEIGHT
             + 14.0

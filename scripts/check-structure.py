@@ -15,7 +15,7 @@ def main():
     parser.add_argument("--top", type=int, default=10)
     arguments = parser.parse_args()
     entries = []
-    for directory in ("src", "tests", "scripts", "examples"):
+    for directory in ("src", "tests", "scripts", "examples", "plugins/ai-runtime/src"):
         for path in (ROOT / directory).rglob("*"):
             if path.suffix in EXTENSIONS and path.is_file():
                 content = path.read_bytes()

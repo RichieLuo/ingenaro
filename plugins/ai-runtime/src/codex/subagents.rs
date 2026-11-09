@@ -1,8 +1,5 @@
 use super::*;
-use crate::ai::{SubagentState, page_agent_label};
-
-pub(super) const MCP_NAME: &str = "rpshop_live";
-pub(super) const MCP_TOKEN_ENV: &str = "RPSHOP_NATIVE_MCP_BEARER";
+use crate::{SubagentState, page_agent_label};
 
 #[derive(Default)]
 pub(super) struct Observer {

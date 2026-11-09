@@ -21,6 +21,8 @@ mod parallel;
 mod permissions;
 #[cfg(test)]
 mod permissions_tests;
+#[cfg(test)]
+mod plugin_tests;
 mod progress;
 mod qa;
 mod queue;
@@ -133,14 +135,14 @@ impl Workbench {
                 settings
                     .engines
                     .iter()
-                    .any(|engine| &engine.id == *id && ai::is_local(engine.kind))
+                    .any(|engine| &engine.id == *id && ai::is_desktop_engine(engine.kind))
             })
             .cloned()
             .unwrap_or_else(|| {
                 settings
                     .engines
                     .iter()
-                    .find(|engine| ai::is_local(engine.kind))
+                    .find(|engine| ai::is_desktop_engine(engine.kind))
                     .map(|engine| engine.id.clone())
                     .unwrap_or_default()
             });
@@ -234,6 +236,13 @@ impl Workbench {
         }
     }
 
+    pub(super) fn has_configured_engines(&self) -> bool {
+        self.settings
+            .engines
+            .iter()
+            .any(|engine| ai::is_desktop_engine(engine.kind))
+    }
+
     pub(super) fn open_startup(&mut self, example: bool) {
         self.visible = true;
         if example {
@@ -279,6 +288,12 @@ impl Workbench {
     }
 
     fn isolate(&mut self) {
+        self.external_cancelled.store(true, Ordering::SeqCst);
+        self.server = None;
+        self.isolate_conversation();
+    }
+
+    fn isolate_conversation(&mut self) {
         self.cancel();
         self.history_open = false;
         self.authorization.reset();
@@ -291,8 +306,6 @@ impl Workbench {
         self.model_override = None;
         self.effort_override = Default::default();
         self.discuss_only = false;
-        self.external_cancelled.store(true, Ordering::SeqCst);
-        self.server = None;
         self.generation = uuid::Uuid::new_v4().to_string();
         self.binding = None;
         self.session_id = None;
@@ -432,6 +445,25 @@ impl App {
         self.ai.last_project_key.clear();
     }
 
+    pub(super) fn ai_plugin_enable(&mut self) {
+        self.ai.visible = true;
+        self.sidebar_layout.inspector_open = false;
+    }
+
+    pub(super) fn ai_plugin_disable(&mut self) {
+        self.ai.isolate_conversation();
+        self.ai.visible = false;
+        self.ai.settings_open = false;
+        self.ai.titles = Default::default();
+        self.ai.palette = Default::default();
+        self.ai.local_scan = None;
+        self.ai.scan_started = false;
+        self.ai.diagnostics_jobs.clear();
+        self.ai.catalogs.clear();
+        self.ai_reveal.clear();
+        self.sidebar_layout.inspector_open = true;
+    }
+
     pub(super) fn poll_ai(&mut self, ctx: &egui::Context) {
         if self.ai.last_project_key.is_empty() {
             self.ai_bind_document_path(true);
@@ -457,6 +489,13 @@ impl App {
                         .unwrap_or_default()
                 });
             self.ai.restore_composer_preferences(None);
+        }
+        if !self.plugins.contains(super::plugins::Plugin::AiTool) {
+            self.poll_ai_tools(ctx);
+            if self.ai.server.is_some() {
+                ctx.request_repaint_after(Duration::from_millis(50));
+            }
+            return;
         }
         self.ai_poll_discovery();
         self.ai_poll_images();

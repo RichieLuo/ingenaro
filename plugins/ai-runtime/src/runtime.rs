@@ -1,5 +1,5 @@
 use super::{AiEvent, EngineKind, SessionBinding, StartRequest};
-use crate::automation::{ToolCall, ToolClient};
+use super::{NativeDesign, ToolCall};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{
@@ -93,8 +93,8 @@ impl AiRuntime {
     }
 
     pub fn start_with_subagents(request: StartRequest) -> Result<RunningSession, String> {
-        if !super::is_local(request.config.kind) {
-            return Err("原生子代理需要本地智能体".into());
+        if !super::is_local(request.config.kind) || request.host.native_design.is_none() {
+            return Err("This host or engine does not support native page delegation".into());
         }
         Self::start_job(request, Purpose::NativeDesign)
     }
@@ -145,13 +145,18 @@ impl AiRuntime {
         {
             return Err("Session belongs to another project or engine".into());
         }
+        if request.config.kind == EngineKind::Plugin {
+            request.key = None;
+            request.mcp = None;
+            request.resume = None;
+        }
         // Codex persists the registered dynamic tool schemas on the thread.
         // Claude reads its MCP tool definitions on each launch.
         if request.config.kind == EngineKind::Codex
             && request
                 .resume
                 .as_ref()
-                .is_some_and(|resume| resume.tool_revision != super::TOOL_PROTOCOL_REVISION)
+                .is_some_and(|resume| resume.tool_revision != request.host.tool_revision)
         {
             request.resume = None;
         }
@@ -161,14 +166,8 @@ impl AiRuntime {
             let mcp = request
                 .mcp
                 .as_ref()
-                .ok_or("Design agents require an Ingenaro loopback MCP bridge")?;
+                .ok_or("Design agents require an authenticated loopback MCP bridge")?;
             validate_mcp(&mcp.endpoint, &mcp.token)?;
-        }
-        request.tools = request
-            .tools
-            .scoped(request.scope.clone(), request.cancelled.clone());
-        if super::is_local(request.config.kind) {
-            request.tools = request.tools.until_cancelled();
         }
         let (events_tx, events) = mpsc::sync_channel(256);
         let shared = Arc::new(Shared {
@@ -182,7 +181,7 @@ impl AiRuntime {
             shared: shared.clone(),
         };
         std::thread::Builder::new()
-            .name("rpshop-ai-runtime".into())
+            .name("ai-design-runtime".into())
             .spawn(move || {
                 let deadline = match purpose {
                     Purpose::Palette { .. } => Some(Instant::now() + Duration::from_secs(180)),
@@ -211,6 +210,7 @@ impl AiRuntime {
                     EngineKind::Codex => super::codex::run(&job),
                     EngineKind::Claude => super::claude::run(&job),
                     EngineKind::OpenAiCompatible => super::api::run(&job),
+                    EngineKind::Plugin => super::plugin::run(&job),
                 });
                 if let Err(message) = result
                     && !job.is_cancelled()
@@ -223,7 +223,7 @@ impl AiRuntime {
                 job.flush_text();
                 if let Ok(mut state) = job.shared.steering.lock() {
                     state.target = None;
-                    state.finish(Err("本轮已结束，未确认的引导已保留为草稿".into()));
+                    state.finish(Err("本轮已结束，引导未获确认".into()));
                 }
                 job.shared.finished.store(true, Ordering::Release);
                 job.shared.cancelled.store(true, Ordering::Release);
@@ -278,6 +278,14 @@ impl Job {
         matches!(self.purpose, Purpose::NativeDesign)
     }
 
+    pub fn native_profile(&self) -> Option<&NativeDesign> {
+        self.request
+            .host
+            .native_design
+            .as_ref()
+            .filter(|_| self.native_subagents())
+    }
+
     pub fn palette_search(&self) -> bool {
         matches!(self.purpose, Purpose::Palette { web_search: true })
     }
@@ -292,7 +300,7 @@ impl Job {
             state.finish(if accepted {
                 Ok(())
             } else {
-                Err("引擎未接受引导，草稿已保留".into())
+                Err("引擎未接受引导".into())
             });
         }
     }
@@ -415,7 +423,7 @@ impl Job {
                 session_id,
                 engine_id: self.request.config.id.clone(),
                 scope: self.request.scope.clone(),
-                tool_revision: super::TOOL_PROTOCOL_REVISION,
+                tool_revision: self.request.host.tool_revision,
             },
         });
     }
@@ -478,25 +486,30 @@ impl Job {
             ));
         }
         if !self.request.tools.supports_tool(&name) {
-            return Ok((json!({"error":"Unknown Ingenaro tool"}), true));
+            return Ok((json!({"error":"Unknown host tool"}), true));
         }
         let report_error = self.native_subagents()
-            || matches!(
-                name.as_str(),
-                crate::automation::DESIGN_PAGES_TOOL | crate::automation::EDIT_PAGE_TOOL
-            );
+            || self
+                .request
+                .host
+                .native_design
+                .as_ref()
+                .is_some_and(|profile| profile.detailed_error_tools.contains(&name.as_str()));
         self.emit(AiEvent::ToolCall {
             id: id.clone(),
             name: name.clone(),
             arguments: arguments.clone(),
         });
-        let tools: ToolClient = self.request.tools.clone();
+        let tools = self.request.tools.clone();
+        let interrupted = Arc::new(AtomicBool::new(false));
+        let worker_interrupted = interrupted.clone();
         let (tx, rx) = mpsc::sync_channel(1);
         std::thread::spawn(move || {
-            let _ = tx.send(tools.call(ToolCall { name, arguments }));
+            let _ = tx.send(tools.call(ToolCall { name, arguments }, &worker_interrupted));
         });
         let result = loop {
-            self.check()?;
+            self.check()
+                .inspect_err(|_| interrupted.store(true, Ordering::Release))?;
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(result) => break result,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -511,16 +524,16 @@ impl Job {
                 redact_value(&mut value, &self.secrets());
                 (value, true)
             }
-            Err(_) => (json!({"error":"Ingenaro tool failed or was denied"}), true),
+            Err(_) => (json!({"error":"Host tool failed or was denied"}), true),
         };
         if serde_json::to_vec(&value)
             .map_or(true, |v| v.len() > super::process::MAX_INPUT_FRAME / 2)
         {
-            return Err("Ingenaro tool result exceeded the size limit".into());
+            return Err("Host tool result exceeded the size limit".into());
         }
         let mut public_value = value.clone();
         if let Some(object) = public_value.as_object_mut() {
-            object.remove("_rpshop_image");
+            object.remove(self.request.host.image_result_field);
         }
         self.emit(AiEvent::ToolResult {
             id,
@@ -537,10 +550,12 @@ impl Job {
                 self.request.context, self.request.prompt
             );
         }
-        let automation_skill = include_str!("../../.agents/skills/rpshop-automation/SKILL.md");
         format!(
-            "You are Ingenaro's design assistant. Use only the supplied Ingenaro tools to inspect or modify the live prototype. Respect explicit tool approvals.\n\n{automation_skill}\n\nProject context:\n{}\n\nUser request:\n{}",
-            self.request.context, self.request.prompt
+            "You are the design assistant for {name}. Use only the supplied host tools to inspect or modify the live document. Respect explicit tool approvals.\n\n{instructions}\n\nProject context:\n{}\n\nUser request:\n{}",
+            self.request.context,
+            self.request.prompt,
+            name = self.request.host.name,
+            instructions = self.request.host.instructions,
         )
     }
 }

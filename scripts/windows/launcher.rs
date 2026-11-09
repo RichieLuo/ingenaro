@@ -42,7 +42,7 @@ fn show_error(message: &str) {
         ) -> i32;
     }
     let text: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
-    let caption: Vec<u16> = "Shop launcher".encode_utf16().chain(Some(0)).collect();
+    let caption: Vec<u16> = "Ingenaro".encode_utf16().chain(Some(0)).collect();
     // The UTF-16 buffers remain alive for the synchronous message box call.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), 0x10) };
 }
@@ -61,7 +61,7 @@ fn main() {
     });
     if let Err(error) = result {
         show_error(&format!(
-            "Could not start the latest Shop application.\n\n{error}"
+            "Could not start Ingenaro.\n\n{error}"
         ));
         std::process::exit(1);
     }

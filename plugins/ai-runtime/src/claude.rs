@@ -46,26 +46,27 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
     if !job.design_tools() {
         command.arg("--no-session-persistence");
     }
-    if job.native_subagents() {
+    let native = job.native_profile();
+    if let Some(native) = native {
         command
             .arg("--agents")
-            .arg(subagents::definitions(job).to_string());
-        command.args(["--agent", "rpshop-coordinator"]);
+            .arg(subagents::definitions(job, native).to_string());
+        command.args(["--agent", native.claude_coordinator]);
     }
     let mcp_config = if job.design_tools() {
         let mcp = job
             .request
             .mcp
             .as_ref()
-            .ok_or("Claude requires the Ingenaro MCP bridge")?;
-        json!({"mcpServers":{"rpshop":{"type":"http","url":mcp.endpoint,"headers":{"Authorization":format!("Bearer {}",mcp.token)}}}})
+            .ok_or("Claude requires the host MCP bridge")?;
+        json!({"mcpServers":{(job.request.host.claude_mcp_name):{"type":"http","url":mcp.endpoint,"headers":{"Authorization":format!("Bearer {}",mcp.token)}}}})
     } else {
         json!({"mcpServers":{}})
     };
     command.arg("--mcp-config").arg(mcp_config.to_string());
     let process = Process::spawn(&mut command, &job.request.working_dir)?;
-    job.interrupt(process.writer.clone(), json!({"type":"control_request","request_id":"rpshop-interrupt","request":{"subtype":"interrupt"}}));
-    process.send(json!({"type":"control_request","request_id":"rpshop-initialize","request":{"subtype":"initialize","hooks":{}}}))?;
+    job.interrupt(process.writer.clone(), json!({"type":"control_request","request_id":"ai-runtime-interrupt","request":{"subtype":"interrupt"}}));
+    process.send(json!({"type":"control_request","request_id":"ai-runtime-initialize","request":{"subtype":"initialize","hooks":{}}}))?;
     let mut prompt_sent = false;
     let mut public_output = PublicOutput::default();
     let mut agents = subagents::Observer::default();
@@ -87,11 +88,11 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
             job.bind(session.into());
             job.steer_target(process.writer.clone(), session.into(), String::new());
         }
-        if job.native_subagents() {
-            agents.observe(job, &frame);
+        if let Some(native) = native {
+            agents.observe(job, native, &frame);
         }
         match frame["type"].as_str().unwrap_or("") {
-            "control_response" if frame["response"]["request_id"] == "rpshop-initialize" => {
+            "control_response" if frame["response"]["request_id"] == "ai-runtime-initialize" => {
                 if frame["response"]["subtype"] == "error" {
                     return Err("Claude control initialization failed; check CLI version".into());
                 }
@@ -166,13 +167,17 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
                     let name = request["tool_name"].as_str().unwrap_or("").to_owned();
                     let arguments = request["input"].clone();
                     let allowed = job.design_tools()
-                        && (is_rpshop_tool(&job.request.tools, &name)
-                            || job.native_subagents()
-                                && subagents::allowed_call(&name, &arguments))
+                        && (is_host_tool(
+                            job.request.tools.as_ref(),
+                            job.request.host.claude_mcp_name,
+                            &name,
+                        ) || native.is_some_and(|profile| {
+                            subagents::allowed_call(profile, &name, &arguments)
+                        }))
                         && job.permission(id.clone(), name, arguments.clone())?;
                     process.send(permission_response(&id, allowed, arguments))?;
                 } else {
-                    process.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"Unsupported Ingenaro control request"}}))?;
+                    process.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"Unsupported host control request"}}))?;
                 }
             }
             "result" => {
@@ -197,7 +202,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
 }
 /// SDKUserMessage.message is an Anthropic MessageParam. Image blocks use
 /// Base64ImageSource, not a filename in prompt text. The CLI owns any native
-/// session persistence; Ingenaro never writes this payload into its project/logs.
+/// session persistence; the runtime never writes this payload into its project/logs.
 fn user_message(job: &Job) -> Value {
     let content = if job.request.images.is_empty() {
         json!(job.prompt())
@@ -320,15 +325,15 @@ fn public_event(reasoning: bool, text: &str) -> AiEvent {
     }
 }
 
-fn is_rpshop_tool(tools: &crate::automation::ToolClient, name: &str) -> bool {
-    name.strip_prefix("mcp__rpshop__")
+fn is_host_tool(tools: &dyn crate::ToolClient, server: &str, name: &str) -> bool {
+    name.strip_prefix(&format!("mcp__{server}__"))
         .is_some_and(|name| tools.supports_tool(name))
 }
 fn permission_response(id: &str, allowed: bool, arguments: Value) -> Value {
     let response = if allowed {
         json!({"behavior":"allow","updatedInput":arguments})
     } else {
-        json!({"behavior":"deny","message":"Denied by Ingenaro; only explicitly approved prototype tools are permitted"})
+        json!({"behavior":"deny","message":"Denied by the host; only explicitly approved tools are permitted"})
     };
     json!({"type":"control_response","response":{"subtype":"success","request_id":id,"response":response}})
 }
@@ -396,9 +401,10 @@ mod tests {
     }
     #[test]
     fn builtin_and_other_mcp_servers_cannot_be_approved() {
-        let (_, tools) = crate::automation::ToolHost::new();
-        assert!(!is_rpshop_tool(&tools, "Bash"));
-        assert!(!is_rpshop_tool(&tools, "mcp__other__update"));
-        assert!(!is_rpshop_tool(&tools, "mcp__rpshop__unregistered"));
+        let tools = crate::host::tests::TestTools;
+        assert!(is_host_tool(&tools, "editor", "mcp__editor__read_document"));
+        assert!(!is_host_tool(&tools, "editor", "Bash"));
+        assert!(!is_host_tool(&tools, "editor", "mcp__other__read_document"));
+        assert!(!is_host_tool(&tools, "editor", "mcp__editor__unregistered"));
     }
 }

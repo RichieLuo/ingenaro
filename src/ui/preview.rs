@@ -58,12 +58,13 @@ impl App {
             if let Some(server) = &mut self.browser_preview {
                 server.publish_with_native_document(self.project.clone(), keys, native)?;
             } else {
-                self.browser_preview =
-                    Some(ingenaro::preview::PreviewServer::start_with_native_document(
+                self.browser_preview = Some(
+                    ingenaro::preview::PreviewServer::start_with_native_document(
                         self.project.clone(),
                         keys,
                         native,
-                    )?);
+                    )?,
+                );
             }
             Ok(self
                 .browser_preview

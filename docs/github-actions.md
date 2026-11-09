@@ -11,7 +11,7 @@
 | macOS Apple Silicon | `macos-15` | `aarch64-apple-darwin` | `<Product>-<version>-macos-arm64.tar.gz` |
 | Linux x64 | `ubuntu-24.04` | `x86_64-unknown-linux-gnu` | `<Product>-<version>-linux-x64.tar.gz` |
 
-`<Product>` 为 SQLShop、LinkShop 或 Ingenaro，版本来自各自的 `Cargo.toml`。每个程序包均附带 `.sha256` 校验文件，包内保留使用说明、版本信息和第三方许可。macOS 和 Linux 当前提供便携二进制包，Windows 提供便携包和可选的当前用户安装脚本。
+`<Product>` 为 Ingenaro，版本来自 `Cargo.toml`。每个程序包均附带 `.sha256` 校验文件，包内保留使用说明、版本信息和第三方许可。macOS 和 Linux 当前提供便携二进制包，Windows 提供便携包和可选的当前用户安装脚本。
 
 ## 触发构建
 
@@ -38,6 +38,6 @@
 - 打包显式传入 `--no-install`，不会尝试在托管运行器上创建开始菜单或注册文件打开方式。
 - 上传步骤缺少程序包时直接失败；已压缩的文件不再重复压缩。每个平台的摘要列出文件名、大小与下载链接。
 - 重跑同一版本标签时，会创建缺失的 GitHub Release，或更新已有版本的同名附件，避免重复创建版本导致失败。
-- “Rust”检查和“跨平台打包”是独立工作流。打包成功说明程序包已经生成，功能测试、SQLShop 专用数据库联测和实际桌面运行的验证范围应分别查看对应记录。
+- “Rust”检查和“跨平台打包”是独立工作流。打包成功说明程序包已经生成，功能测试和实际桌面运行的验证范围应分别查看对应记录。
 
 共同开发与打包约定见 [架构说明](architecture.md)。运行器的可用版本见 [GitHub 官方运行器清单](https://github.com/actions/runner-images)，产物参数见 [上传构建产物文档](https://github.com/actions/upload-artifact)。

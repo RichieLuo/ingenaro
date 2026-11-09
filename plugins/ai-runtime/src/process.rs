@@ -79,6 +79,23 @@ pub(super) fn cli_command(config: &EngineConfig) -> Result<Command, String> {
         Ok(Command::new(executable))
     }
 }
+pub(super) fn plugin_command(path: &Path) -> Result<Command, String> {
+    if !path.is_absolute() || !path.is_file() {
+        return Err("自定义引擎文件不存在，请在 AI 设置中重新选择".into());
+    }
+    let extension = path.extension().and_then(OsStr::to_str).unwrap_or_default();
+    if extension.eq_ignore_ascii_case("mjs") {
+        let node = find_executable("node").ok_or("运行 .mjs 引擎需要在 PATH 中安装 Node.js")?;
+        let mut command = Command::new(node);
+        command.arg("--").arg(path);
+        return Ok(command);
+    }
+    if cfg!(windows) && !extension.eq_ignore_ascii_case("exe") {
+        return Err("Windows 自定义引擎需要 .exe 或 .mjs 文件".into());
+    }
+    Ok(Command::new(path))
+}
+
 fn find_executable(name: &str) -> Option<PathBuf> {
     executable_on_path(name, &std::env::var_os("PATH").unwrap_or_default())
 }
@@ -159,6 +176,22 @@ fn windows_file_id(path: &Path) -> Option<(u32, u32, u32)> {
 }
 
 pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> {
+    if config.kind == EngineKind::Plugin {
+        let result = plugin_command(
+            config
+                .executable
+                .as_deref()
+                .unwrap_or_else(|| Path::new("")),
+        );
+        return Ok(Diagnostics {
+            available: result.is_ok(),
+            version: None,
+            login_hint: "自定义引擎由本机文件启动并管理认证".into(),
+            action_hint: result
+                .err()
+                .unwrap_or_else(|| "发送消息时检查引擎协议版本".into()),
+        });
+    }
     if config.kind == EngineKind::OpenAiCompatible {
         return Ok(Diagnostics {
             available: true,
@@ -218,7 +251,7 @@ pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> 
         available: success && compatible && logged_in,
         version,
         login_hint: if logged_in {
-            "CLI reports logged in; Ingenaro did not read any login credential"
+            "CLI reports logged in; the runtime did not read any login credential"
         } else {
             "CLI is not logged in or status could not be verified"
         }
@@ -636,7 +669,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn codex_finds_its_desktop_tool_host_even_when_the_install_is_off_path() {
-        let root = std::env::temp_dir().join(format!("rpshop-codex-path-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("ai-codex-path-{}", uuid::Uuid::new_v4()));
         let shim = root.join("shim");
         let other = root.join("other");
         let desktop_bin = root.join("desktop-bin");
@@ -756,7 +789,7 @@ mod tests {
     }
     #[test]
     fn cmd_shim_never_uses_command_interpreter() {
-        let dir = std::env::temp_dir().join(format!("rpshop-cli-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("ai-cli-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(dir.join("node_modules/@openai/codex/bin")).unwrap();
         std::fs::write(dir.join("node_modules/@openai/codex/bin/codex.js"), "").unwrap();
         std::fs::write(dir.join("node.exe"), "").unwrap();

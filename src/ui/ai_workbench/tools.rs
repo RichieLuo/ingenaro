@@ -107,7 +107,8 @@ impl App {
             let read = request.call.name.starts_with("rpshop_read_")
                 || matches!(
                     request.call.name.as_str(),
-                    "rpshop_capabilities"
+                    automation::LIST_PLUGINS_TOOL
+                        | "rpshop_capabilities"
                         | "rpshop_list_versions"
                         | "rpshop_show_page"
                         | "rpshop_set_view"
@@ -156,6 +157,12 @@ impl App {
         request: Option<&automation::ToolRequest>,
     ) -> Result<Value, String> {
         self.ai_tool_active(request)?;
+        if matches!(
+            call.name.as_str(),
+            automation::LIST_PLUGINS_TOOL | automation::OPEN_PLUGIN_MANAGER_TOOL
+        ) {
+            return self.plugin_tool(call);
+        }
         let is_read = call.name.starts_with("rpshop_read_")
             || matches!(
                 call.name.as_str(),
@@ -396,11 +403,19 @@ impl App {
         let mut close = false;
         let response = dialog_style::modal(ctx, "ai-tool-authorization").show(ctx, |ui| {
             ui.set_width((ctx.content_rect().width() - 96.0).clamp(280.0, 540.0));
+            let opens_plugin_manager =
+                self.ai.pending_tool.as_ref().is_some_and(|request| {
+                    request.call.name == automation::OPEN_PLUGIN_MANAGER_TOOL
+                });
             close |= dialog_style::header(
                 ui,
                 dialog_style::Symbol::Shield,
                 "确认本次工具操作",
-                "AI 希望更新当前设计，修改可以撤销",
+                if opens_plugin_manager {
+                    "AI 请求打开插件列表，由你选择要添加的工具。"
+                } else {
+                    "AI 希望更新当前设计，修改可以撤销"
+                },
             );
             if let Some(request) = &self.ai.pending_tool {
                 dialog_style::section(ui, |ui| {
@@ -436,7 +451,8 @@ impl App {
                             ui.monospace(text.chars().take(12000).collect::<String>());
                         });
                 });
-                if self.ai_builtin_request(request)
+                if !opens_plugin_manager
+                    && self.ai_builtin_request(request)
                     && ui.button("完全授权本会话，后续不再询问…").clicked()
                 {
                     self.ai.authorization.confirm_full = true;

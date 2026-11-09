@@ -126,13 +126,16 @@ impl App {
                     )
                 })?
                 .save(&self.project, path)
-        } else if path
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("ingenaro") || e.eq_ignore_ascii_case("rpshop") || e.eq_ignore_ascii_case("json"))
-        {
+        } else if path.extension().is_some_and(|e| {
+            e.eq_ignore_ascii_case("ingenaro")
+                || e.eq_ignore_ascii_case("rpshop")
+                || e.eq_ignore_ascii_case("json")
+        }) {
             self.project.save(path)
         } else {
-            anyhow::bail!("请选择 .rp、.rplib、.ingenaro 或旧版 .rpshop 文件，不能将工程写入其他文件类型")
+            anyhow::bail!(
+                "请选择 .rp、.rplib、.ingenaro 或旧版 .rpshop 文件，不能将工程写入其他文件类型"
+            )
         }
     }
 
@@ -147,7 +150,10 @@ impl App {
     pub(super) fn replace(&mut self, action: &str) {
         let result = match action {
             "open" => rfd::FileDialog::new()
-                .add_filter("RP / Ingenaro 文件", &["rp", "rplib", "ingenaro", "rpshop", "json"])
+                .add_filter(
+                    "RP / Ingenaro 文件",
+                    &["rp", "rplib", "ingenaro", "rpshop", "json"],
+                )
                 .add_filter("RP 工程", &["rp"])
                 .add_filter("RP 组件库", &["rplib"])
                 .add_filter("Ingenaro 工程", &["ingenaro", "rpshop", "json"])

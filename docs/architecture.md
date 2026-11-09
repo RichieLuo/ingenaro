@@ -1,6 +1,6 @@
-# Shop 项目约定
+# Ingenaro 架构
 
-SQLShop、LinkShop、Ingenaro 使用相同的桌面入口、目录职责和发布流程。每个仓库均可独立克隆、构建和打包，不依赖其他 Shop 仓库的位置。
+Ingenaro 独立管理桌面编辑器、工程格式和发布流程。AI 运行时通过宿主工具接口接入，可被其他应用复用。
 
 ## 代码边界
 
@@ -8,27 +8,28 @@ SQLShop、LinkShop、Ingenaro 使用相同的桌面入口、目录职责和发�
 src/main.rs          声明桌面模块，调用 app::run()
 src/app.rs           创建窗口、图标与启动选项
 src/cli.rs           命令行操作（有命令行功能的项目）
-src/shell_open.rs    共用的 GUI 文件参数、Windows 单实例与文件转发
+src/shell_open.rs    GUI 文件参数、Windows 单实例与文件转发
 src/branding.rs      运行时图标与品牌资源
 src/branding_icon.rs Windows 图标像素生成，供 build.rs 使用
 src/lib.rs           对外暴露业务模型、服务与存储模块
 src/ui/mod.rs        界面状态、eframe 生命周期与分区组合
 src/ui/*.rs          按功能划分的界面、控件与界面测试
+src/ui/plugins.rs   应用级插件目录、启用状态和生命周期
+src/ai.rs           Ingenaro 工具和权限接入 AI 运行时
+plugins/ai-runtime/ 可独立构建的 AI 运行时和可执行插件协议
 tests/              业务集成测试
 assets/             内嵌图像、字体及其许可
 scripts/            开发、检查、打包与专项验证入口
 docs/               功能范围、验证记录与维护说明
 ```
 
-`main.rs` 不放业务逻辑。`app.rs` 管窗口启动，`ui/` 将用户操作交给库中的业务模块；库不依赖桌面入口或 UI 模块。界面分区使用正常的 Rust 子模块声明，测试放在所属模块旁。各项目的数据库、HTTP、原生 RP 格式等业务模块继续使用自己的名称，不为目录对称而强行抽象。
+`main.rs` 不放业务逻辑。`app.rs` 管窗口启动，`ui/` 将用户操作交给库中的业务模块；库不依赖桌面入口或 UI 模块。界面分区使用正常的 Rust 子模块声明，测试放在所属模块旁。编辑器拥有文档模型、权限、事务、撤销、预览与导出。AI 运行时提供引擎适配、流式事件、取消、模型发现、图片输入和插件协议。应用插件目录提供随程序分发的「AI 工具」，用户在工具栏添加后启用工作台。「AI 工具」内部管理 CLI 和自定义引擎。Ingenaro 的工作台、聊天记录、设计历史、密钥和项目绑定保留在宿主。两侧通过每轮绑定的工具客户端交换定义、调用及结果。其他桌面应用可以实现自己的客户端和产品配置。详见 [AI 运行时与插件协议](../plugins/ai-runtime/README.md)。
 
-`branding.rs` 可保留各平台所需的图标处理；SQLShop 的 macOS Dock 和 Windows 窗口行为仍由自己的平台适配实现。现有配置目录、文件格式和命令行参数保持兼容。
-
-三仓库的 `shell_open.rs` 保持一致。Windows GUI 在当前用户的登录会话中按产品保持单实例；再次启动将文件请求转发给现有 GUI，并请求恢复窗口和聚焦，不重复打开会写入同一配置的实例。SQL 文件只载入编辑器，SQLite 交给已有本地数据库入口；LinkShop 使用现有 Postman 导入流程；Ingenaro 沿用未保存文档确认。纯命令行操作独立运行，不进入 GUI 单实例转发。
+Windows GUI 按当前用户登录会话和产品保持单实例。再次启动时转发文件请求并恢复窗口焦点。编辑器沿用未保存文档确认，纯命令行操作独立运行。
 
 ## 开发与检查
 
-三个项目的最低 Rust 版本均为 1.89，使用 Rust 2024 edition；依赖由各自的 `Cargo.lock` 固定，应用的发布版本独立管理。开发 profile 禁用增量编译；release profile 使用 thin LTO 和 strip。
+最低 Rust 版本为 1.89，使用 Rust 2024 edition。工作区依赖由 `Cargo.lock` 固定，应用与 AI 运行时各有版本号。开发 profile 禁用增量编译；release profile 使用 thin LTO 和 strip。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 run
@@ -38,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify
 
 任务语义一致：`check` 检查所有 target；`clippy` 执行 lint 并拒绝 warning；`test` 运行默认测试；`fmt` 检查格式；`verify` 依次执行 fmt、clippy、test。`build` 和 `release` 只编译，产物仍在 Cargo target 目录。`run` 后可传应用参数。Ingenaro 另保留原有 `demo`、`screenshot` 别名。
 
-Windows 脚本共用 `common.ps1`，优先选择完整的 VS 2022 C++ 工具链和 Windows SDK；其他系统或已配置的开发 shell 可直接使用 Cargo。三个项目均使用 Cargo 的注册表配置，不再由脚本强制指定镜像；旧 LinkShop 的 `-CratesIo` 参数继续接受。
+Windows 脚本共用 `common.ps1`，优先选择完整的 VS 2022 C++ 工具链和 Windows SDK；其他系统或已配置的开发 shell 可直接使用 Cargo。脚本使用本机 Cargo 的注册表配置。
 
 ## 打包契约
 
@@ -59,12 +60,12 @@ python3 -m unittest discover -s scripts/tests -v
 
 默认使用 `rustc -vV` 的 host target。显式 target 必须具有对应 Rust 标准库和本机/交叉编译工具链。脚本执行 `cargo build --locked --release --target <target>`；Windows 使用静态 MSVC CRT。`--skip-build`（PowerShell 的 `-SkipBuild`）仅封装已存在的对应 target 产物，不重新保证其编译选项。Cargo 配置或 `CARGO_TARGET_DIR` 指定的 target 目录受支持。
 
-`Cargo.toml` 的 `[package.metadata.shop]` 声明 `product-name`。版本从 Cargo metadata 获取，输出为：
+`Cargo.toml` 的 `[package.metadata.ingenaro]` 声明 `product-name`。版本从 Cargo metadata 获取，输出为：
 
 ```text
 dist/<Product>-<version>-<os>-<arch>/
   <crate-name>[.exe]
-  shop-launcher.exe               Windows：稳定入口使用的轻量启动器
+  ingenaro-launcher.exe               Windows：稳定入口使用的轻量启动器
   install.ps1 / windows_install.py / create-shortcut.ps1  Windows 用户安装入口
   windows_desktop.py / launch-desktop.ps1  Windows 真实桌面安装代理
   使用说明.txt
@@ -90,14 +91,12 @@ Windows 安装和自动刷新通过真实 Explorer 桌面对象启动隐藏的 P
 
 构建平台、手动触发、产物下载与版本附件说明见 [GitHub Actions 构建与下载](github-actions.md)。
 
-`ci.yml` 在 Windows、macOS、Linux 运行格式检查、clippy、默认测试和打包契约测试。SQLShop 额外保留原有真实数据库集成任务。`release.yml` 在 Windows x64、macOS x64/arm64、Linux x64 调用相同的打包脚本，并上传压缩包和校验文件供检查。
+`ci.yml` 在 Windows、macOS、Linux 运行格式检查、clippy、默认测试和打包契约测试。Rust 检查覆盖桌面端和 AI 运行时。`release.yml` 在 Windows x64、macOS x64/arm64、Linux x64 调用相同的打包脚本，并上传压缩包和校验文件供检查。
 
 只有推送 `v<version>` tag 才创建 GitHub Release，tag 必须与 Cargo 版本一致；普通分支、PR 和手动运行只构建产物。包为未签名的便携程序，Windows 附带可选的当前用户安装脚本；macOS 为二进制 tar.gz，Linux 需要目标系统的动态库；macOS 未签名或公证。各平台是否构建及启动成功，以实际 CI 和目标机器验证为准。
-
-修改通用脚本、工作流或本约定时，应将相同改动同步到另外两个仓库，并运行打包契约测试，避免三份独立入口逐渐分叉。
 
 ## 模块维护
 
 详细拆分结果见 [本轮结构调整](refactoring.md)。优先按模型、持久化、协议处理、操作协调和视图职责拆分，测试按行为分组，共用 fixture 留在对应测试入口。公共业务导入路径通过显式重导出保持兼容；实现细节继续限制在所属模块或 UI 内，不为拆文件扩大为公共 API。
 
-`python scripts/check-structure.py` 统计 `src`、`tests`、`scripts`、`examples` 中的自有代码。CI 拒绝超过 1,200 行或 128 KiB 的代码文件；此上限是防止回退的检查线，增加新职责时应更早拆分。vendor 上游代码、构建产物和资产数据不参与此检查。`.editorconfig` 与 `.gitattributes` 固定缩进、UTF-8 和源文件换行约定。
+`python scripts/check-structure.py` 统计 `src`、`plugins/ai-runtime/src`、`tests`、`scripts`、`examples` 中的自有代码。CI 拒绝超过 1,200 行或 128 KiB 的代码文件；此上限是防止回退的检查线，增加新职责时应更早拆分。vendor 上游代码、构建产物和资产数据不参与此检查。`.editorconfig` 与 `.gitattributes` 固定缩进、UTF-8 和源文件换行约定。

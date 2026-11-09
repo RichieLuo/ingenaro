@@ -140,7 +140,7 @@ fn display_name_discards_paths_controls_and_debug_never_contains_input() {
 
 #[test]
 fn file_input_is_snapshotted_and_rejects_non_files_without_path_leaks() {
-    let dir = std::env::temp_dir().join(format!("rpshop-image-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("ai-runtime-image-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     let path = dir.join("private-reference.png");
     std::fs::write(&path, png(2, 2)).unwrap();

@@ -1,6 +1,6 @@
 # Windows 用户安装与文件打开方式
 
-SQLShop、LinkShop、Ingenaro 使用相同的当前用户安装流程。需要 Windows、Python 3.9+ 和与本机架构一致的 Windows MSVC 包。安装不需要管理员权限。
+Ingenaro 支持当前用户安装。需要 Windows、Python 3.9+ 和与本机架构一致的 Windows MSVC 包。安装不需要管理员权限。
 
 ## 从仓库打包并安装
 
@@ -8,7 +8,7 @@ SQLShop、LinkShop、Ingenaro 使用相同的当前用户安装流程。需要 W
 powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Install -OutputDirectory .\dist\installed-candidate
 ```
 
-`-Install` 执行首次安装，创建开始菜单 `Shop` 文件夹下的产品快捷方式，并注册支持的文件类型。已有安装属于当前仓库时，后续普通的成功打包会自动更新安装：
+`-Install` 执行首次安装，在开始菜单直接创建 Ingenaro 快捷方式，并注册支持的文件类型。已有安装属于当前仓库时，后续普通的成功打包会自动更新安装：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -OutputDirectory .\dist\next-candidate
@@ -29,43 +29,35 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -PackageDirectory
 ## 稳定快捷方式与不可变版本
 
 ```text
-%LOCALAPPDATA%\Programs\Shop\<Product>\
-  <Product>.exe                 稳定的无控制台启动器
+%LOCALAPPDATA%\Programs\Ingenaro\
+  Ingenaro.exe                 稳定的无控制台启动器
   current.path                  最新完整版本的绝对路径，UTF-8
   install-state.json            源仓库、版本、校验和和安装位置
   versions\<version>-<exe-sha>-<package-sha>\
-    <crate-name>.exe
+    ingenaro.exe
     package.json
     THIRD-PARTY-NOTICES.tsv
     licenses\ ...
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Shop\<Product>.lnk
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Ingenaro.lnk
 ```
 
-`<Product>` 为 `SQLShop`、`LinkShop` 或 `Ingenaro`。开始菜单快捷方式和注册表中的打开命令都指向稳定启动器，而非某次打包的 `dist` 路径。安装先校验程序、启动器和复制后的整个包，再原子切换 `current.path`；源 `dist` 包以后可以移动。快捷方式图标来自当前版本的程序。
+上面是新安装的位置。若已有安装记录位于 `%LOCALAPPDATA%\Programs\Shop\Ingenaro`，更新继续使用原目录，让旧快捷方式和固定入口仍能启动。开始菜单快捷方式和注册表中的打开命令都指向稳定启动器，而非某次打包的 `dist` 路径。安装先校验程序、启动器和复制后的整个包，再原子切换 `current.path`；源 `dist` 包以后可以移动。快捷方式图标来自当前版本的程序。
 
 每次启动都解析最新指针，并将原始 Windows 参数转交给对应程序，支持空格和中文路径。已运行的实例保留当前会话；关闭后重新打开才使用新版本。安装器不会强杀进程、替换正在运行的程序或删除旧版本目录，因此不影响未保存的工作。旧目录暂不自动清理。
 
-三个仓库共用相同的 `src/shell_open.rs`。Windows 下，同一用户登录会话中的同一产品只保留一个 GUI 实例；从开始菜单或文件再次启动会向现有窗口转发请求并恢复、聚焦窗口。SQLShop 只载入 SQL 文件供编辑，不自动执行；SQLite 使用已有本地数据库入口。LinkShop 调用已有 Postman collection / environment 导入。Ingenaro 打开文件前保留现有未保存确认流程。纯命令行功能继续独立运行，不占用 GUI 单实例入口。
+Windows 下，同一用户登录会话只保留一个 Ingenaro GUI 实例。从开始菜单或文件再次启动会向现有窗口转发请求并恢复焦点。打开文件保留现有未保存确认流程。纯命令行功能独立运行。
 
 ## 文件类型与默认应用
 
-| 工具 | 注册到“打开方式”的类型 |
-| --- | --- |
-| SQLShop | `.sql`、`.sqlite`、`.sqlite3`、`.db`、`.db3` |
-| LinkShop | `.json`，用于 Postman collection / environment |
-| Ingenaro | `.ingenaro`、旧版 `.rpshop`、`.rp`、`.rplib`、`.json` |
-
-`.json`、`.db` 等通用扩展名可能属于其他工具；文件仍需符合所选应用实际支持的格式。脚本在 HKCU 注册 `App Paths`、应用/ProgID 打开命令、`OpenWithProgids`、`SupportedTypes` 和 `Capabilities` / `RegisteredApplications`，保留现有扩展名默认值及受保护的 `UserChoice`。注册本身不会静默切换默认应用。
+注册到「打开方式」的类型包括 `.ingenaro`、旧版 `.rpshop`、`.rp`、`.rplib` 和 `.json`。`.json` 的内容须符合 Ingenaro 工程格式。脚本在 HKCU 注册 `App Paths`、应用/ProgID 打开命令、`OpenWithProgids`、`SupportedTypes` 和 `Capabilities` / `RegisteredApplications`，保留现有扩展名默认值及受保护的 `UserChoice`。注册本身不会静默切换默认应用。
 
 在文件的右键菜单中选择“打开方式”，或在 Windows 设置的“默认应用”中选择对应工具。安装时加 `-OpenDefaultApps` 可以打开产品的默认应用设置页；也可使用官方设置地址：
 
 ```text
-ms-settings:defaultapps?registeredAppUser=SQLShop
-ms-settings:defaultapps?registeredAppUser=LinkShop
 ms-settings:defaultapps?registeredAppUser=Ingenaro
 ```
 
-这些名称就是 HKCU `Software\RegisteredApplications` 中登记的名称。[Microsoft 的默认应用设置文档](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-apps-settings) 说明了 `registeredAppUser` 参数及适用的 Windows 11 版本；其他版本仍可在“默认应用”中搜索产品名称。安装与打包脚本都不会绕过系统默认应用确认流程。
+这个名称就是 HKCU `Software\RegisteredApplications` 中登记的名称。[Microsoft 的默认应用设置文档](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-apps-settings) 说明了 `registeredAppUser` 参数及适用的 Windows 11 版本；其他版本仍可在“默认应用”中搜索产品名称。安装与打包脚本都不会绕过系统默认应用确认流程。
 
 ## 验证
 
@@ -82,8 +74,8 @@ python -m unittest discover -s scripts/tests -v
 ```powershell
 . .\scripts\common.ps1
 Initialize-ShopToolchain
-rustc --edition 2024 --crate-name shop_launcher -C target-feature=+crt-static scripts/windows/launcher.rs -o target/shop-launcher-test.exe
-$env:SHOP_TEST_LAUNCHER_EXE = (Resolve-Path target/shop-launcher-test.exe).Path
+rustc --edition 2024 --crate-name ingenaro_launcher -C target-feature=+crt-static scripts/windows/launcher.rs -o target/ingenaro-launcher-test.exe
+$env:SHOP_TEST_LAUNCHER_EXE = (Resolve-Path target/ingenaro-launcher-test.exe).Path
 python -m unittest discover -s scripts/tests -p test_windows_launcher.py -v
 Remove-Item Env:\SHOP_TEST_LAUNCHER_EXE
 ```

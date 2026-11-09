@@ -25,7 +25,7 @@ class PackageTests(unittest.TestCase):
         (self.root / "docs" / "portable-readme.txt").write_text("启动说明\n", encoding="utf-8")
         self.package = {"id": "shop", "name": "testshop", "version": "1.2.3",
                         "manifest_path": str(self.root / "Cargo.toml"),
-                        "metadata": {"shop": {"product-name": "TestShop"}}}
+                        "metadata": {"ingenaro": {"product-name": "TestShop"}}}
         self.target_directory = self.root / "custom target"
         vendor = self.root / "vendor" / "patched-driver"
         vendor.mkdir(parents=True)
@@ -68,7 +68,7 @@ class PackageTests(unittest.TestCase):
             self.assertIn("driver", contents.read(prefix + "THIRD-PARTY-NOTICES.tsv").decode("utf-8-sig"))
             self.assertEqual(json.loads(contents.read(prefix + "package.json"))["target"], target)
             self.assertIn("启动说明", contents.read(prefix + "使用说明.txt").decode("utf-8-sig"))
-            self.assertEqual(contents.read(prefix + "shop-launcher.exe"), b"test launcher")
+            self.assertEqual(contents.read(prefix + "ingenaro-launcher.exe"), b"test launcher")
             self.assertIn(prefix + "install.ps1", contents.namelist())
             self.assertIn(prefix + "windows_desktop.py", contents.namelist())
             self.assertIn(prefix + "launch-desktop.ps1", contents.namelist())
@@ -106,7 +106,7 @@ class PackageTests(unittest.TestCase):
     def test_missing_binary_and_unsafe_product_do_not_create_output(self):
         with self.assertRaises(FileNotFoundError):
             self.build_package("x86_64-pc-windows-msvc", skip_build=True)
-        self.package["metadata"]["shop"]["product-name"] = "../outside"
+        self.package["metadata"]["ingenaro"]["product-name"] = "../outside"
         with self.assertRaises(ValueError):
             self.build_package("x86_64-pc-windows-msvc", skip_build=True)
         self.assertFalse((self.root / "dist").exists())

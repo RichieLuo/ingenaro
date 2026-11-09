@@ -4,13 +4,16 @@ use std::{borrow::Cow, collections::HashMap};
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke, vec2};
 use ingenaro::model::{Project, Widget};
 
+mod naro;
+use naro::NaroAnimation;
+
 const DRAW_SECONDS: f64 = 0.52;
 const BATCH_SECONDS: f64 = 2.8;
 
 #[derive(Default)]
 pub(super) struct DesignReveal {
     entries: HashMap<(u64, u64), Entry>,
-    naro_texture: Option<egui::TextureHandle>,
+    naro: Option<NaroAnimation>,
 }
 
 struct Entry {
@@ -260,42 +263,19 @@ impl DesignReveal {
                     if progress >= fraction {
                         let strand_y = mix(bounds.top(), bounds.bottom(), fraction);
                         painter.line_segment(
-                            [Pos2::new(bounds.left(), strand_y), Pos2::new(bounds.right(), strand_y)],
-                            Stroke::new(0.9, egui::Color32::from_rgba_unmultiplied(97, 41, 232, 34)),
+                            [
+                                Pos2::new(bounds.left(), strand_y),
+                                Pos2::new(bounds.right(), strand_y),
+                            ],
+                            Stroke::new(
+                                0.9,
+                                egui::Color32::from_rgba_unmultiplied(97, 41, 232, 34),
+                            ),
                         );
                     }
                 }
             }
-            let spider_size = 34.0;
-            let spider_min = Pos2::new(
-                (bounds.right() + 5.0).clamp(clip.left() + 3.0, clip.right() - spider_size - 3.0),
-                (bounds.top() - 20.0).clamp(clip.top() + 3.0, clip.bottom() - spider_size - 3.0),
-            );
-            let spider_rect = Rect::from_min_size(spider_min, vec2(spider_size, spider_size));
-            let spider_center = spider_rect.center();
-            let thread = Stroke::new(1.15, egui::Color32::from_rgba_unmultiplied(173, 141, 240, 150));
-            painter.line_segment([spider_center, bounds.left_top()], thread);
-            painter.line_segment([spider_center, bounds.right_top()], thread);
-            if self.naro_texture.is_none() {
-                let image = image::load_from_memory(include_bytes!("../../assets/branding/ingenaro-icon.png"))
-                    .expect("the embedded Naro spider artwork must be a valid image")
-                    .into_rgba8();
-                let size = [image.width() as usize, image.height() as usize];
-                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
-                self.naro_texture = Some(ctx.load_texture(
-                    "ingenaro-naro-weaving",
-                    color_image,
-                    egui::TextureOptions::LINEAR,
-                ));
-            }
-            if let Some(texture) = &self.naro_texture {
-                painter.image(
-                    texture.id(),
-                    spider_rect,
-                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                    Color32::WHITE,
-                );
-            }
+            self.paint_naro(ctx, painter, bounds, time);
         }
         let galley = painter.layout_no_wrap(
             "Naro 正在编织…".into(),
@@ -320,6 +300,34 @@ impl DesignReveal {
             Color32::from_rgba_unmultiplied(250, 248, 255, 245),
         );
         painter.galley(min + vec2(11.0, 6.0), galley, super::PURPLE);
+    }
+
+    fn paint_naro(
+        &mut self,
+        ctx: &egui::Context,
+        painter: &egui::Painter,
+        bounds: Rect,
+        time: f64,
+    ) {
+        let clip = painter.clip_rect();
+        let size = 36.0_f32.min(clip.width().min(clip.height()) - 6.0);
+        if size <= 0.0 {
+            return;
+        }
+        let min = (bounds.right_top() + vec2(5.0, -20.0))
+            .max(clip.min + vec2(3.0, 3.0))
+            .min(clip.max - vec2(size + 3.0, size + 3.0));
+        let sprite = Rect::from_min_size(min, vec2(size, size));
+        let thread = Stroke::new(1.15, Color32::from_rgba_unmultiplied(173, 141, 240, 150));
+        painter.line_segment([sprite.center(), bounds.left_top()], thread);
+        painter.line_segment([sprite.center(), bounds.right_top()], thread);
+        let animation = self.naro.get_or_insert_with(|| NaroAnimation::load(ctx));
+        painter.image(
+            animation.frame_at(time).id(),
+            sprite,
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            Color32::WHITE,
+        );
     }
 }
 

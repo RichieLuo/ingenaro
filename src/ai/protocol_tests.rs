@@ -230,7 +230,7 @@ fn cli_images_use_real_structured_payloads_on_initial_and_resumed_turns() {
         ImageAttachment::from_rgba("private-reference.png", 1, 1, &[255, 0, 0, 255]).unwrap(),
         noisy_image(576),
     ];
-    assert!(images[1].byte_len() > super::process::MAX_FRAME);
+    assert!(images[1].byte_len() > 1024 * 1024);
     for (kind, source, session_id) in [
         (EngineKind::Claude, CLAUDE, "claude-mock-session"),
         (EngineKind::Codex, CODEX, "mock-session"),

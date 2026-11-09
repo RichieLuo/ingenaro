@@ -111,8 +111,14 @@ impl App {
             {
                 self.ai.artifact_open = true;
             }
-            // Reserve space for the queue, progress row, grip, and footer.
-            let height_budget = ui.available_height() - self.ai_queue_height() - 89.0;
+            // Keep the composer usable first. The queue scrolls in the space
+            // left over, and the chat takes the rest.
+            let spacing = ui.spacing().item_spacing.y;
+            let chrome =
+                composer::COMPOSER_CHROME_HEIGHT + ui.spacing().interact_size.y + 2.0 * spacing;
+            let available = (ui.available_height() - chrome).max(0.0);
+            let queue_height = self.ai_queue_height(ui, available - self.ai_composer_min_height());
+            let height_budget = available - queue_height;
             self.ai_resize_composer(ui, height_budget - MIN_CHAT_HEIGHT);
             let chat_height = (height_budget - self.ai.composer_height).max(0.0);
             egui::ScrollArea::vertical()
@@ -185,7 +191,7 @@ impl App {
                         state
                     });
             });
-            self.ai_queue_panel(ui);
+            self.ai_queue_panel(ui, queue_height);
             self.ai_composer(ui);
         });
         #[cfg(test)]
@@ -197,7 +203,6 @@ impl App {
         });
         #[cfg(not(test))]
         let _ = panel_response;
-        self.ai_external_window(ctx);
     }
 
     pub(super) fn ai_new_conversation(&mut self) {
@@ -303,7 +308,11 @@ impl App {
         self.ai.state = "内置示例 · 不是模型生成结果".into();
     }
 
-    fn ai_external_window(&mut self, ctx: &egui::Context) {
+    pub(in crate::ui) fn ai_open_external_window(&mut self) {
+        self.ai.mcp_open = true;
+    }
+
+    pub(in crate::ui) fn ai_external_window(&mut self, ctx: &egui::Context) {
         if self.ai.mcp_open {
             let mut open = true;
             dialog_style::window(ctx, "外部 API / MCP")
@@ -477,7 +486,7 @@ impl App {
             let server = self.ai.server.as_ref().unwrap();
             ui.monospace(server.endpoint());
             if ui.button("复制 MCP 配置（含临时密钥）").clicked() {
-                let config = serde_json::json!({"mcpServers":{"rpshop":{"type":"http","url":server.endpoint(),"headers":{"Authorization":format!("Bearer {}",server.token())}}}});
+                let config = serde_json::json!({"mcpServers":{"ingenaro":{"type":"http","url":server.endpoint(),"headers":{"Authorization":format!("Bearer {}",server.token())}}}});
                 ctx.copy_text(serde_json::to_string_pretty(&config).unwrap_or_default());
                 self.ai.state = "已复制临时配置；仅交给信任的本机客户端，不提交到仓库。".into();
             }

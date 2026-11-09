@@ -53,7 +53,7 @@ fn replace_text(app: &mut App, ctx: &egui::Context, painted: &str, value: &str) 
         app,
         ctx,
         vec![
-            key(egui::Key::A, egui::Modifiers::CTRL),
+            key(egui::Key::A, egui::Modifiers::COMMAND),
             egui::Event::Text(value.into()),
         ],
     );

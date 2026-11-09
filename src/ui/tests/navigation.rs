@@ -512,7 +512,7 @@ fn all_canvas_modes_keep_rulers_fixed_and_every_canvas_pass_below_them() {
             .iter()
             .enumerate()
             .find_map(|(index, clipped)| match &clipped.shape {
-                egui::Shape::Text(text) if text.galley.text() == "正在绘制..." => {
+                egui::Shape::Text(text) if text.galley.text() == "Naro 正在编织…" => {
                     Some((index, clipped))
                 }
                 _ => None,

@@ -136,23 +136,24 @@ impl App {
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         let logo = Some(crate::branding::title_texture(&cc.egui_ctx));
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        let logo = image::load_from_memory(include_bytes!("../../assets/branding/ingenaro-icon.png"))
-            .ok()
-            .map(|img| {
-                // The header displays this at 38 logical pixels. Keep a prefiltered
-                // 2x texture so the GPU does not have to minify the full artwork.
-                let img = img
-                    .resize_exact(76, 76, image::imageops::FilterType::Lanczos3)
-                    .into_rgba8();
-                cc.egui_ctx.load_texture(
-                    "rpshop-header-icon",
-                    egui::ColorImage::from_rgba_unmultiplied(
-                        [img.width() as usize, img.height() as usize],
-                        &img,
-                    ),
-                    egui::TextureOptions::LINEAR,
-                )
-            });
+        let logo =
+            image::load_from_memory(include_bytes!("../../assets/branding/ingenaro-icon.png"))
+                .ok()
+                .map(|img| {
+                    // The header displays this at 38 logical pixels. Keep a prefiltered
+                    // 2x texture so the GPU does not have to minify the full artwork.
+                    let img = img
+                        .resize_exact(76, 76, image::imageops::FilterType::Lanczos3)
+                        .into_rgba8();
+                    cc.egui_ctx.load_texture(
+                        "rpshop-header-icon",
+                        egui::ColorImage::from_rgba_unmultiplied(
+                            [img.width() as usize, img.height() as usize],
+                            &img,
+                        ),
+                        egui::TextureOptions::LINEAR,
+                    )
+                });
         let screenshot_mode = screenshot.is_some();
         let startup_selection = args
             .windows(2)
@@ -176,16 +177,26 @@ impl App {
             .into_iter()
             .collect();
         let mut ai = ai_workbench::Workbench::new(!screenshot_mode && !cfg!(test), ai_document_id);
-        if args
-            .iter()
-            .any(|arg| arg == "--ai-design" || arg == "--ai-example")
-        {
-            ai.open_startup(args.iter().any(|arg| arg == "--ai-example"));
-        }
         let qa_kind = screenshot_mode
             .then(|| std::env::var("RPSHOP_QA_DIALOG").ok())
             .flatten();
+        let open_ai = args
+            .iter()
+            .any(|arg| arg == "--ai-design" || arg == "--ai-example");
+        let plugins = if open_ai || qa_kind.as_deref().is_some_and(|kind| kind != "plugins") {
+            if open_ai {
+                ai.open_startup(args.iter().any(|arg| arg == "--ai-example"));
+            }
+            plugins::Plugins::from_legacy(true)
+        } else if screenshot_mode {
+            plugins::Plugins::default()
+        } else {
+            cc.storage
+                .and_then(|storage| eframe::get_value(storage, plugins::STORAGE_KEY))
+                .unwrap_or_else(|| plugins::Plugins::from_legacy(ai.has_configured_engines()))
+        };
         let mut app = Self {
+            plugins,
             ai,
             ai_reveal: Default::default(),
             project,
@@ -228,8 +239,10 @@ impl App {
             native,
             cached_native_preview_source: None,
         };
-        if let Some(kind) = qa_kind {
-            app.ai_seed_qa(&kind);
+        match qa_kind.as_deref() {
+            Some("plugins") => app.plugins.open = true,
+            Some(kind) => app.ai_seed_qa(kind),
+            None => {}
         }
         app
     }

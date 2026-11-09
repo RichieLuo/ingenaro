@@ -1,27 +1,11 @@
-//! Same-process follow-ups; a failed/unacknowledged send never clears the draft.
+//! Same-process follow-ups from the queue. Remove an entry only after acknowledgement.
 use super::*;
 
 pub(super) struct Pending {
     submission: queue::Submission,
     receipt: mpsc::Receiver<Result<(), String>>,
-    queue_id: Option<u64>,
 }
 impl App {
-    pub(super) fn ai_steer(&mut self) {
-        if self.ai.steering.is_some() {
-            self.ai.state = "上一条引导正在等待确认".into();
-            return;
-        }
-        let submission = match self.ai_capture_submission() {
-            Ok(submission) => submission,
-            Err(error) => {
-                self.ai.state = error;
-                return;
-            }
-        };
-        self.ai_steer_submission(submission, None);
-    }
-
     pub(super) fn ai_steer_queued(&mut self, id: u64) {
         let Some(submission) = self
             .ai
@@ -32,10 +16,6 @@ impl App {
         else {
             return;
         };
-        self.ai_steer_submission(submission, Some(id));
-    }
-
-    fn ai_steer_submission(&mut self, submission: queue::Submission, queue_id: Option<u64>) {
         if self.ai.steering.is_some() {
             self.ai.state = "上一条引导正在等待确认".into();
             return;
@@ -48,7 +28,7 @@ impl App {
                 return Err("这条消息不属于当前工程或会话，不能引导当前对话".into());
             }
             if !submission.reference_files.is_empty() {
-                return Err("附带参考文件时请使用排队发送".into());
+                return Err("附带参考文件的消息将在队列中等待下一轮".into());
             }
             let binding = self
                 .ai
@@ -61,7 +41,7 @@ impl App {
             if submission.read_only != self.ai.task_readonly
                 || submission.context_mode != self.ai.task_context
             {
-                return Err("引导不能改变当前任务的权限或引用范围，请使用排队发送".into());
+                return Err("引导需沿用当前任务的权限和引用范围，这条消息会留在队列".into());
             }
             let running = self.ai.running.as_ref().ok_or("当前没有运行中的任务")?;
             let text = format!(
@@ -72,7 +52,6 @@ impl App {
             Ok(Pending {
                 submission,
                 receipt,
-                queue_id,
             })
         })();
         match result {
@@ -90,7 +69,7 @@ impl App {
         let result = match pending.receipt.try_recv() {
             Ok(result) => result,
             Err(mpsc::TryRecvError::Empty) => return,
-            Err(_) => Err("引导未获确认，草稿已保留".into()),
+            Err(_) => Err("引导未获确认".into()),
         };
         let pending = self.ai.steering.take().unwrap();
         let submission = pending.submission;
@@ -101,23 +80,10 @@ impl App {
             return;
         }
         if let Err(error) = result {
-            self.ai.state = error;
+            self.ai.state = format!("{error} · 消息仍在队列中");
             return;
         }
-        // Edits made while waiting for acknowledgement are never erased.
-        if let Some(id) = pending.queue_id {
-            self.ai.queue.remove(id);
-        } else if self.ai.prompt == submission.prompt
-            && self
-                .ai
-                .images
-                .iter()
-                .map(|i| i.id())
-                .eq(submission.images.iter().map(|i| i.id()))
-        {
-            self.ai.prompt.clear();
-            self.ai.images.clear();
-        }
+        self.ai.queue.remove(submission.id);
         let mut display = submission.prompt;
         for image in &submission.images {
             display.push_str(&format!("\n[图片：{}]", image.name()));
@@ -142,86 +108,28 @@ mod tests {
     use super::*;
     use crate::ui::tests::fixture;
 
-    #[test]
-    fn acknowledgement_preserves_new_edits_and_error_keeps_original_draft() {
-        for (accepted, changed) in [(true, false), (true, true), (false, false)] {
-            let mut app = fixture(Project::default());
-            let config = ai::EngineConfig::new(ai::EngineKind::Codex);
-            app.ai.selected_engine = config.id.clone();
-            app.ai.settings.engines.push(config);
-            app.ai.prompt = "补充要求".into();
-            let submission = app.ai_capture_submission().unwrap();
-            let (tx, receipt) = mpsc::channel();
-            app.ai.steering = Some(Pending {
-                submission,
-                receipt,
-                queue_id: None,
-            });
-            if changed {
-                app.ai.prompt = "等待时的新编辑".into();
-            }
-            tx.send(if accepted {
-                Ok(())
-            } else {
-                Err("引擎拒绝引导".into())
-            })
-            .unwrap();
-            app.ai_poll_steering();
-            assert_eq!(app.ai.messages.len(), usize::from(accepted));
-            assert_eq!(
-                app.ai.prompt,
-                if changed {
-                    "等待时的新编辑"
-                } else if accepted {
-                    ""
-                } else {
-                    "补充要求"
-                }
-            );
-            assert!(app.ai.steering.is_none());
-        }
-    }
-
-    #[test]
-    fn in_flight_steering_cannot_be_queued_again_or_cross_a_generation() {
+    fn awaiting_queued_steering() -> (App, u64, mpsc::Sender<Result<(), String>>) {
         let mut app = fixture(Project::default());
         let config = ai::EngineConfig::new(ai::EngineKind::Codex);
         app.ai.selected_engine = config.id.clone();
         app.ai.settings.engines.push(config);
-        app.ai.prompt = "补充要求".into();
+        app.ai.prompt = "排队的消息".into();
         let submission = app.ai_capture_submission().unwrap();
+        let id = app.ai.queue.push(submission).unwrap();
+        let submission = app.ai.queue.entries().next().unwrap().clone();
         let (tx, receipt) = mpsc::channel();
         app.ai.steering = Some(Pending {
             submission,
             receipt,
-            queue_id: None,
         });
-        app.ai_submit();
-        assert_eq!(app.ai.queue.len(), 0);
-        assert_eq!(app.ai.prompt, "补充要求");
-        app.ai.generation = "another-generation".into();
-        tx.send(Ok(())).unwrap();
-        app.ai_poll_steering();
-        assert!(app.ai.messages.is_empty());
-        assert_eq!(app.ai.prompt, "补充要求");
+        (app, id, tx)
     }
+
     #[test]
     fn queued_steering_removes_only_after_ack_and_never_clears_draft() {
         for accepted in [false, true] {
-            let mut app = fixture(Project::default());
-            let config = ai::EngineConfig::new(ai::EngineKind::Codex);
-            app.ai.selected_engine = config.id.clone();
-            app.ai.settings.engines.push(config);
-            app.ai.prompt = "排队的消息".into();
-            let submission = app.ai_capture_submission().unwrap();
-            let id = app.ai.queue.push(submission.clone()).unwrap();
+            let (mut app, _, tx) = awaiting_queued_steering();
             app.ai.prompt = "另一条草稿".into();
-            let (tx, receipt) = mpsc::channel();
-            app.ai.steering = Some(Pending {
-                submission,
-                receipt,
-                queue_id: Some(id),
-            });
             app.ai_poll_queue();
             assert_eq!(app.ai.queue.len(), 1);
             tx.send(if accepted {
@@ -234,6 +142,35 @@ mod tests {
             assert_eq!(app.ai.queue.len(), usize::from(!accepted));
             assert_eq!(app.ai.prompt, "另一条草稿");
             assert_eq!(app.ai.messages.len(), usize::from(accepted));
+            assert!(app.ai.steering.is_none());
         }
+    }
+
+    #[test]
+    fn a_new_submission_can_queue_while_steering_is_awaiting_ack() {
+        let (mut app, id, tx) = awaiting_queued_steering();
+        app.ai.prompt = "等待确认期间的新消息".into();
+        app.ai_submit();
+        assert!(app.ai.prompt.is_empty());
+        assert!(app.ai.running.is_none());
+        assert_eq!(app.ai.queue.len(), 2);
+
+        tx.send(Ok(())).unwrap();
+        app.ai_poll_steering();
+        let queued = app.ai.queue.entries().next().unwrap();
+        assert_ne!(queued.id, id);
+        assert_eq!(queued.prompt, "等待确认期间的新消息");
+        assert_eq!(app.ai.queue.len(), 1);
+        assert_eq!(app.ai.messages[0].text, "排队的消息");
+    }
+
+    #[test]
+    fn acknowledgement_cannot_cross_a_generation() {
+        let (mut app, _, tx) = awaiting_queued_steering();
+        app.ai.generation = "another-generation".into();
+        tx.send(Ok(())).unwrap();
+        app.ai_poll_steering();
+        assert!(app.ai.messages.is_empty());
+        assert_eq!(app.ai.queue.len(), 1);
     }
 }

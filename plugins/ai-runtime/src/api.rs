@@ -63,7 +63,7 @@ pub(super) fn run(job: &Job) -> Result<(), String> {
         state: "running".into(),
     });
     let mut messages = vec![json!({"role":"user","content":user_content(job)})];
-    let tools = api_tools();
+    let tools = api_tools(&job.request.tools.tool_definitions());
     for _ in 0..MAX_TURNS {
         job.check()?;
         let body = json!({"model":job.request.config.model,"messages":messages,"stream":true,"tools":tools,"tool_choice":"auto"});
@@ -181,8 +181,8 @@ fn user_content(job: &Job) -> Value {
     content.push(json!({"type":"text","text":job.prompt()}));
     Value::Array(content)
 }
-fn api_tools() -> Value {
-    Value::Array(crate::automation::tools().as_array().into_iter().flatten().map(|t| json!({"type":"function","function":{"name":t["name"],"description":t["description"],"parameters":t["inputSchema"]}})).collect())
+fn api_tools(definitions: &Value) -> Value {
+    Value::Array(definitions.as_array().into_iter().flatten().map(|t| json!({"type":"function","function":{"name":t["name"],"description":t["description"],"parameters":t["inputSchema"]}})).collect())
 }
 fn append_bounded(dest: &mut String, part: Option<&str>, limit: usize) -> Result<(), String> {
     if let Some(part) = part {
@@ -300,7 +300,10 @@ mod tests {
     }
     #[test]
     fn mcp_tools_convert_to_openai_schema() {
-        for tool in api_tools().as_array().unwrap() {
+        for tool in api_tools(&crate::host::tests::definitions())
+            .as_array()
+            .unwrap()
+        {
             assert_eq!(tool["type"], "function");
             assert!(tool["function"]["parameters"].is_object());
         }

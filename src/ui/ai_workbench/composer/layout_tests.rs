@@ -32,15 +32,24 @@ fn queued_images_keep_footer_and_single_row_controls_inside_short_windows() {
                     |ctx| app.update(ctx, &mut eframe::Frame::_new_kittest()),
                 );
                 let send = toolbar::control_bounds(&context, "send");
-                let footer =
-                    crate::ui::tests::text_center(&output, "Enter 发送 · Shift+Enter 换行");
+                let (footer, clip) = output
+                    .shapes
+                    .iter()
+                    .find_map(|clipped| match &clipped.shape {
+                        egui::Shape::Text(text)
+                            if text.galley.text() == "Enter 发送 · Shift+Enter 换行" =>
+                        {
+                            Some((
+                                Rect::from_min_size(text.pos, text.galley.size()),
+                                clipped.clip_rect,
+                            ))
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("{width}x{height}: composer footer was not painted"));
                 assert!(
-                    footer.y < height - 24.0,
-                    "{width}x{height}: footer={footer:?}"
-                );
-                assert!(
-                    send.max.y < height - 24.0,
-                    "{width}x{height}: send={send:?}"
+                    clip.contains_rect(footer) && clip.contains_rect(send),
+                    "{width}x{height}: footer={footer:?}, send={send:?}, clip={clip:?}"
                 );
                 for name in ["engine", "permission", "model"] {
                     let rect = toolbar::control_bounds(&context, name);

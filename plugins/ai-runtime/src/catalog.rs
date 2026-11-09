@@ -67,8 +67,7 @@ pub fn discover_models(config: &EngineConfig) -> Result<ModelCatalog, String> {
     if !is_local(config.kind) {
         return Err("当前只支持 Claude Code 和 Codex 本地工具".into());
     }
-    let directory =
-        std::env::temp_dir().join(format!("rpshop-model-catalog-{}", uuid::Uuid::new_v4()));
+    let directory = std::env::temp_dir().join(format!("ai-model-catalog-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&directory).map_err(|_| "无法创建模型目录检查工作区")?;
     struct Cleanup(PathBuf);
     impl Drop for Cleanup {
@@ -130,8 +129,8 @@ pub fn discover_models(config: &EngineConfig) -> Result<ModelCatalog, String> {
     let mut cursors = HashSet::new();
     let mut pages = 0;
     match config.kind {
-        EngineKind::Codex=>process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"rpshop-model-picker","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}}))?,
-        _=>process.send(json!({"type":"control_request","request_id":"rpshop-models","request":{"subtype":"initialize","hooks":{}}}))?,
+        EngineKind::Codex=>process.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"ai-model-picker","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}}))?,
+        _=>process.send(json!({"type":"control_request","request_id":"ai-runtime-models","request":{"subtype":"initialize","hooks":{}}}))?,
     }
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
@@ -146,7 +145,7 @@ pub fn discover_models(config: &EngineConfig) -> Result<ModelCatalog, String> {
         match config.kind {
             EngineKind::Claude => {
                 if frame["type"] != "control_response"
-                    || frame["response"]["request_id"] != "rpshop-models"
+                    || frame["response"]["request_id"] != "ai-runtime-models"
                 {
                     continue;
                 }

@@ -72,7 +72,9 @@ impl App {
                     self.ai.visible = false;
                     self.sidebar_layout.inspector_open = !properties;
                 }
-                if activity_button(ui, Icon::Ai, "AI 设计", self.ai.visible, true).clicked() {
+                if self.plugins.contains(plugins::Plugin::AiTool)
+                    && activity_button(ui, Icon::Ai, "AI 设计", self.ai.visible, true).clicked()
+                {
                     self.ai_toggle();
                 }
             });
