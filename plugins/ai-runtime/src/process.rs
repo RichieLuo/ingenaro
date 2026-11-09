@@ -20,12 +20,20 @@ pub(super) fn cli_command(config: &EngineConfig) -> Result<Command, String> {
     let name = match config.kind {
         EngineKind::Codex => "codex",
         EngineKind::Claude => "claude",
+        EngineKind::Antigravity => "agy",
         _ => return Err("API engines do not have a CLI".into()),
     };
     let executable = config
         .executable
         .clone()
         .or_else(|| find_executable(name))
+        .or_else(|| {
+            if config.kind != EngineKind::Antigravity {
+                return None;
+            }
+            let home = directories::BaseDirs::new()?;
+            executable_on_path(name, home.home_dir().join(".local/bin").as_os_str())
+        })
         .ok_or("AI CLI not found; install it or select its executable")?;
     #[cfg(windows)]
     let executable = if config.kind == EngineKind::Codex {
@@ -49,10 +57,10 @@ pub(super) fn cli_command(config: &EngineConfig) -> Result<Command, String> {
         || executable.extension().is_none() && cfg!(windows)
     {
         let parent = executable.parent().ok_or("Invalid CLI executable")?;
-        let package = if config.kind == EngineKind::Codex {
-            "node_modules/@openai/codex/bin/codex.js"
-        } else {
-            "node_modules/@anthropic-ai/claude-code/cli.js"
+        let package = match config.kind {
+            EngineKind::Codex => "node_modules/@openai/codex/bin/codex.js",
+            EngineKind::Claude => "node_modules/@anthropic-ai/claude-code/cli.js",
+            _ => return Err("请选择 Antigravity 的原生 agy.exe 文件".into()),
         };
         let script = parent.join(package);
         if script.is_file() {
@@ -208,8 +216,12 @@ pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> 
                 available: false,
                 version: None,
                 login_hint: "Login status is not inspected".into(),
-                action_hint: "Install the CLI, select its executable, then log in from a terminal"
-                    .into(),
+                action_hint: if config.kind == EngineKind::Antigravity {
+                    "安装 Antigravity CLI 1.5.3 或更新版本，运行 agy 登录；也可在高级设置指定可执行文件"
+                } else {
+                    "Install the CLI, select its executable, then log in from a terminal"
+                }
+                .into(),
             });
         }
     };
@@ -228,6 +240,21 @@ pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> 
     let compatible = version
         .as_deref()
         .is_some_and(|v| version_supported(config.kind, v));
+    if config.kind == EngineKind::Antigravity {
+        let status = (success && compatible)
+            .then(|| super::discover_models(config))
+            .transpose();
+        return Ok(Diagnostics {
+            available: matches!(&status, Ok(Some(_))),
+            version,
+            login_hint: match status {
+                Ok(Some(_)) => "Antigravity CLI 已返回账户的模型目录".into(),
+                Err(error) => error,
+                Ok(None) => "当前 CLI 版本无法连接".into(),
+            },
+            action_hint: "使用 Antigravity CLI 1.5.3 或更新版本；在终端运行 agy 登录".into(),
+        });
+    }
     let mut login_command = cli_command(config)?;
     match config.kind {
         EngineKind::Codex => {
@@ -266,7 +293,7 @@ pub(super) fn diagnostics(config: &EngineConfig) -> Result<Diagnostics, String> 
         .into(),
     })
 }
-fn version_supported(kind: EngineKind, text: &str) -> bool {
+pub(super) fn version_supported(kind: EngineKind, text: &str) -> bool {
     let Some(version) = text
         .split_whitespace()
         .find(|s| s.chars().next().is_some_and(|c| c.is_ascii_digit()))
@@ -280,6 +307,9 @@ fn version_supported(kind: EngineKind, text: &str) -> bool {
         .collect();
     match numbers.as_slice() {
         [major, minor, ..] if kind == EngineKind::Codex => *major > 0 || *minor >= 147,
+        [major, minor, patch, ..] if kind == EngineKind::Antigravity => {
+            (*major, *minor, *patch) >= (1, 5, 3)
+        }
         [major, minor, ..] => *major > 2 || *major == 2 && *minor >= 1,
         _ => false,
     }
@@ -484,7 +514,9 @@ fn read_cli_frame(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
         serde_json::from_slice(&bytes).map_err(|_| "AI CLI emitted invalid JSON".to_owned())?;
     let discarded_echo = discard_input_echoes(&mut value);
     let discarded_inventory = discard_codex_mcp_schemas(&mut value);
-    if bytes.len() > MAX_FRAME && !discarded_echo && !discarded_inventory {
+    let discarded_acp_payload = discard_acp_payload(&mut value);
+    if bytes.len() > MAX_FRAME && !discarded_echo && !discarded_inventory && !discarded_acp_payload
+    {
         return Err("AI stream frame exceeded the size limit".into());
     }
     serde_json::to_writer(
@@ -496,6 +528,34 @@ fn read_cli_frame(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
     )
     .map_err(|_| "AI stream frame exceeded the size limit".to_owned())?;
     Ok(Some(value))
+}
+
+fn discard_acp_payload(frame: &mut Value) -> bool {
+    if frame["method"] != "session/update" {
+        return false;
+    }
+    let Some(update) = frame
+        .pointer_mut("/params/update")
+        .and_then(Value::as_object_mut)
+    else {
+        return false;
+    };
+    let before = update.len();
+    match update.get("sessionUpdate").and_then(Value::as_str) {
+        Some("user_message_chunk") => {
+            update.remove("content");
+        }
+        Some("tool_call" | "tool_call_update") => {
+            update.retain(|key, _| {
+                matches!(
+                    key.as_str(),
+                    "sessionUpdate" | "toolCallId" | "name" | "status"
+                )
+            });
+        }
+        _ => {}
+    }
+    update.len() != before
 }
 
 fn discard_codex_mcp_schemas(frame: &mut Value) -> bool {

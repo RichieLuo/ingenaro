@@ -14,6 +14,11 @@ pub(super) struct Steering {
     pub message_id: Option<String>,
 }
 impl Steering {
+    pub fn close_target(&mut self) -> bool {
+        self.target = None;
+        self.pending.is_some()
+    }
+
     pub fn finish(&mut self, result: Result<(), String>) {
         if let Some(sender) = self.pending.take() {
             let _ = sender.try_send(result);
@@ -54,6 +59,12 @@ pub(super) fn send(
             content.push(json!({"type":"text","text":text}));
             json!({"type":"user","uuid":message_id,"session_id":thread,"parent_tool_use_id":null,"message":{"role":"user","content":content}})
         }
+        EngineKind::Antigravity => super::antigravity::prompt_frame(
+            REQUEST_ID,
+            thread,
+            &format!("用户补充需求：\n{text}"),
+            images,
+        ),
         _ => return Err("此引擎不支持运行中引导".into()),
     };
     writer

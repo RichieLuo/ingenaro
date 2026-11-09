@@ -303,6 +303,72 @@ fn cli_output_eof_reports_error_without_waiting_for_input_writer() {
         Some(AiEvent::Complete { cancelled: false })
     ));
 }
+
+#[test]
+fn antigravity_waits_for_the_steering_result_after_the_main_prompt_finishes() {
+    let Some(fixture) = Fixture::new(
+        r#"
+const assert = require('node:assert/strict');
+const readline = require('node:readline');
+const send = frame => console.log(JSON.stringify({jsonrpc:'2.0', ...frame}));
+let mainPrompt;
+readline.createInterface({input:process.stdin}).on('line', line => {
+    const {id, method, params} = JSON.parse(line);
+    if (method === 'initialize') {
+        send({id,result:{protocolVersion:1,agentInfo:{version:'1.5.3'},agentCapabilities:{
+            mcpCapabilities:{http:true},promptCapabilities:{image:true},
+        }}});
+    } else if (method === 'session/new') {
+        send({id,result:{sessionId:'agy-session'}});
+    } else if (method === 'session/prompt' && id === 2) {
+        mainPrompt = id;
+        const image = params.prompt.find(block => block.type === 'image');
+        assert(image.data.length > 1024 * 1024);
+        assert.equal(image.mimeType,'image/png');
+        send({method:'session/update',params:{sessionId:'agy-session',update:{
+            sessionUpdate:'user_message_chunk',content:image,
+        }}});
+    } else if (method === 'session/prompt') {
+        assert.equal(id,91);
+        assert(params.prompt[0].text.includes('Supplement'));
+        send({id:mainPrompt,result:{stopReason:'end_turn'}});
+        send({method:'session/update',params:{sessionId:'agy-session',update:{
+            sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Follow-up completed'},
+        }}});
+        send({id,result:{stopReason:'end_turn'}});
+    } else if (method === 'session/close') {
+        send({id,result:{}});
+    }
+});
+"#,
+    ) else {
+        return;
+    };
+    let (mut request, host) = fixture.request(EngineKind::Antigravity);
+    request.images.push(noisy_image(576));
+    let running = AiRuntime::start(request).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let event = running
+            .events
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .unwrap();
+        match event {
+            AiEvent::State { state } if state == "running" => break,
+            AiEvent::Error { message } => panic!("{message}"),
+            _ => {}
+        }
+    }
+    let receipt = running.control.steer("Supplement".into(), &[]).unwrap();
+    let events = collect(&running, &host, true);
+    assert_eq!(receipt.try_recv(), Ok(Ok(())));
+    assert_eq!(public_text(&events, false), "Follow-up completed");
+    assert!(matches!(
+        events.last(),
+        Some(AiEvent::Complete { cancelled: false })
+    ));
+}
+
 #[test]
 fn runtime_rejects_image_count_and_aggregate_before_spawning_cli() {
     let Some(f) = Fixture::new(CODEX) else { return };

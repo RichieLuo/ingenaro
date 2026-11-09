@@ -61,7 +61,7 @@ impl App {
             return false;
         }
         let native_edit = kind == design::ArtifactKind::Native && !read_only;
-        let parallel_enabled = native_edit && ai::is_local(config.kind);
+        let parallel_enabled = native_edit && config.kind.supports_page_delegation();
         self.ai.kind = kind;
         self.ai.task_readonly = read_only;
         self.ensure_ai_session();
@@ -163,9 +163,9 @@ impl App {
             .with_reference_prompt(&prompt);
         // Codex resumes the tool definitions registered with the original thread.
         // Keep them stable across turns; the live host checks this turn's mode.
-        if ai::is_local(config.kind) {
+        if config.kind.supports_page_delegation() {
             tools = tools.with_parallel_design();
-        } else if config.kind == ai::EngineKind::Plugin {
+        } else if ai::is_desktop_engine(config.kind) {
             tools = tools.with_single_design();
         }
         // CLI-specific MCP bearer capabilities expire with this turn, not with the application.

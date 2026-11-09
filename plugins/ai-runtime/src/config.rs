@@ -8,6 +8,17 @@ pub enum EngineKind {
     Claude,
     OpenAiCompatible,
     Plugin,
+    Antigravity,
+}
+
+impl EngineKind {
+    pub fn supports_page_delegation(self) -> bool {
+        matches!(self, Self::Claude | Self::Codex)
+    }
+
+    pub fn supports_steering(self) -> bool {
+        self.supports_page_delegation() || self == Self::Antigravity
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,6 +128,7 @@ impl EngineConfig {
             name: match kind {
                 EngineKind::Codex => "Codex CLI",
                 EngineKind::Claude => "Claude Code CLI",
+                EngineKind::Antigravity => "Antigravity CLI",
                 EngineKind::OpenAiCompatible => "OpenAI compatible",
                 EngineKind::Plugin => "自定义引擎",
             }

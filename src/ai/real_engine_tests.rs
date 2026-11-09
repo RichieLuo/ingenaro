@@ -28,7 +28,7 @@ fn smoke(kind: EngineKind) {
     let scope = format!("smoke-{}", uuid::Uuid::new_v4());
     let cancelled = Arc::new(AtomicBool::new(false));
     let (host, tools) = ToolHost::new();
-    let server = if kind == EngineKind::Claude {
+    let server = if matches!(kind, EngineKind::Claude | EngineKind::Antigravity) {
         Some(automation::start(tools.scoped(scope.clone(), cancelled.clone())).unwrap())
     } else {
         None
@@ -119,4 +119,9 @@ fn codex_logged_in_design_smoke() {
 #[ignore = "explicit opt-in: real logged-in Claude model call, max budget USD 0.10"]
 fn claude_logged_in_design_smoke() {
     smoke(EngineKind::Claude);
+}
+#[test]
+#[ignore = "explicit opt-in: real logged-in Antigravity model call, two in-memory tools only"]
+fn antigravity_logged_in_design_smoke() {
+    smoke(EngineKind::Antigravity);
 }

@@ -93,7 +93,7 @@ impl AiRuntime {
     }
 
     pub fn start_with_subagents(request: StartRequest) -> Result<RunningSession, String> {
-        if !super::is_local(request.config.kind) || request.host.native_design.is_none() {
+        if !request.config.kind.supports_page_delegation() || request.host.native_design.is_none() {
             return Err("This host or engine does not support native page delegation".into());
         }
         Self::start_job(request, Purpose::NativeDesign)
@@ -161,7 +161,10 @@ impl AiRuntime {
             request.resume = None;
         }
         if matches!(purpose, Purpose::NativeDesign)
-            || (request.config.kind == EngineKind::Claude && matches!(purpose, Purpose::Design))
+            || (matches!(
+                request.config.kind,
+                EngineKind::Claude | EngineKind::Antigravity
+            ) && matches!(purpose, Purpose::Design))
         {
             let mcp = request
                 .mcp
@@ -209,6 +212,7 @@ impl AiRuntime {
                 let result = job.check().and_then(|()| match job.request.config.kind {
                     EngineKind::Codex => super::codex::run(&job),
                     EngineKind::Claude => super::claude::run(&job),
+                    EngineKind::Antigravity => super::antigravity::run(&job),
                     EngineKind::OpenAiCompatible => super::api::run(&job),
                     EngineKind::Plugin => super::plugin::run(&job),
                 });
@@ -303,6 +307,12 @@ impl Job {
                 Err("引擎未接受引导".into())
             });
         }
+    }
+    pub fn close_steering_target(&self) -> bool {
+        self.shared
+            .steering
+            .lock()
+            .is_ok_and(|mut state| state.close_target())
     }
     pub fn steer_echo(&self, id: Option<&str>) {
         if let Ok(mut state) = self.shared.steering.lock()

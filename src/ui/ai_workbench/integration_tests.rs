@@ -110,6 +110,148 @@ fn mock_model_updates_real_canvas_after_ui_approval_and_is_undoable() {
 }
 
 #[test]
+fn antigravity_uses_the_scoped_editor_bridge_and_the_same_undo_history() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    let executable =
+        std::env::temp_dir().join(format!("ingenaro-agy-{}.mjs", uuid::Uuid::new_v4()));
+    std::fs::write(&executable, ANTIGRAVITY).unwrap();
+    let mut app = fixture(Project::blank());
+    let before = app.project.clone();
+    let mut config = ai::EngineConfig::new(ai::EngineKind::Antigravity);
+    config.executable = Some(executable.clone());
+    app.ai.selected_engine = config.id.clone();
+    app.ai.settings.engines.push(config);
+    app.ai.last_project_key = app.ai_project_key();
+    app.ai.visible = true;
+    let context = egui::Context::default();
+
+    app.ai_change_permission(permissions::PermissionMode::ReadOnly);
+    app.ai.prompt = "只读测试".into();
+    app.ai_start();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while app.ai.running.is_some() && Instant::now() < deadline {
+        frame(&mut app, &context, vec![]);
+        if app.ai.pending_tool.is_some() {
+            let output = frame(&mut app, &context, vec![]);
+            click(
+                &mut app,
+                &context,
+                text_center(&output, "允许本次 Ingenaro 工具操作"),
+            );
+        }
+        assert_eq!(app.project, before);
+        std::thread::yield_now();
+    }
+    assert!(
+        app.ai.running.is_none() && app.ai.task_error.is_none(),
+        "{}",
+        app.ai.state
+    );
+    assert_eq!(app.project, before);
+    assert!(app.undo.is_empty());
+
+    app.ai_change_permission(permissions::PermissionMode::Ask);
+    app.ai.prompt = "更新标题".into();
+    app.ai_start();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    for _ in 0..2 {
+        while app.ai.pending_tool.is_none() && app.ai.running.is_some() && Instant::now() < deadline
+        {
+            frame(&mut app, &context, vec![]);
+            std::thread::yield_now();
+        }
+        assert!(app.ai.pending_tool.is_some(), "{}", app.ai.state);
+        // The first batch creates a widget before hitting an invalid target.
+        // Its partial edit must be rolled back before the second batch.
+        assert_eq!(app.project, before);
+        assert!(app.undo.is_empty());
+        let output = frame(&mut app, &context, vec![]);
+        click(
+            &mut app,
+            &context,
+            text_center(&output, "允许本次 Ingenaro 工具操作"),
+        );
+    }
+    while app.ai.running.is_some() && Instant::now() < deadline {
+        frame(&mut app, &context, vec![]);
+        std::thread::yield_now();
+    }
+    let _ = std::fs::remove_file(executable);
+    assert!(
+        app.ai.running.is_none() && app.ai.task_error.is_none(),
+        "{}",
+        app.ai.state
+    );
+    assert_eq!(app.project.pages[0].widgets[0].text, "Antigravity 标题");
+    assert_eq!(app.undo.len(), 1);
+    app.undo();
+    assert_eq!(app.project, before);
+}
+
+const ANTIGRAVITY: &str = r#"
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import http from 'node:http';
+import readline from 'node:readline';
+
+const send = frame => console.log(JSON.stringify({jsonrpc:'2.0', ...frame}));
+let server, resumed;
+const sessionId = 'antigravity-fixture';
+function mcp(method, params = {}, authorized = true) {
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify({jsonrpc:'2.0',id:1,method,params});
+        const headers = {'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)};
+        if (authorized) for (const {name, value} of server.headers) headers[name] = value;
+        const req = http.request(server.url, {method:'POST',headers}, res => {
+            let data = '';
+            res.setEncoding('utf8').on('data', chunk => data += chunk).on('end', () => {
+                resolve({status:res.statusCode, ...JSON.parse(data)});
+            });
+        });
+        req.on('error', reject);
+        req.end(body);
+    });
+}
+for await (const line of readline.createInterface({input:process.stdin})) {
+    const {id, method, params} = JSON.parse(line);
+    if (method === 'initialize') {
+        assert.equal(params.protocolVersion, 1);
+        assert(process.argv.includes('--include-default-customizations=false'));
+        assert(fs.readFileSync('.agents/agents/ingenaro-design.md','utf8').includes('excludeDefaultComponents: true'));
+        send({id,result:{protocolVersion:1,agentInfo:{version:'1.5.3'},agentCapabilities:{mcpCapabilities:{http:true},sessionCapabilities:{resume:{}}}}});
+    } else if (method === 'session/new' || method === 'session/resume') {
+        resumed = method === 'session/resume';
+        if (resumed) assert.equal(params.sessionId, sessionId);
+        assert.equal(params.mcpServers.length, 1);
+        [server] = params.mcpServers;
+        assert.equal(server.name, 'ingenaro');
+        assert.equal((await mcp('tools/list', {}, false)).status, 401);
+        const inventory = (await mcp('tools/list')).result.tools.map(tool => tool.name);
+        assert(inventory.includes('rpshop_batch_edit'));
+        assert(!inventory.includes('rpshop_design_pages'));
+        send({id,result:{sessionId}});
+    } else if (method === 'session/prompt') {
+        const readOnly = params.prompt[0].text.split('User request:').at(-1).trim() === '只读测试';
+        assert.equal(resumed, !readOnly);
+        const create = {op:'create_widget',id:24,kind:'Text',properties:{text:'Antigravity 标题'}};
+        const invalid = {op:'update_widget',widget_id:99,properties:{text:'不存在'}};
+        const edit = operations => mcp('tools/call', {name:'rpshop_batch_edit',arguments:{operations}});
+        assert.equal((await edit(readOnly ? [create] : [create, invalid])).result.isError, true);
+        if (!readOnly) assert.equal((await edit([create])).result.isError, false);
+        send({id,result:{stopReason:'end_turn'}});
+    } else if (method === 'session/close') {
+        send({id,result:{}});
+    }
+}
+"#;
+
+#[test]
 fn active_turn_secrets_are_rejected_before_document_transaction() {
     let mut app = fixture(Project::blank());
     let before = app.project.clone();

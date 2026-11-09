@@ -38,6 +38,8 @@ Page-local workers edit the assigned page. The coordinating session handles dire
 
 Use `ingenaro_list_plugins` with `{}` to read the application plugin catalog and installation state. Call `ingenaro_open_plugin_manager` with `{}` to open **添加插件** after approval. The user chooses **AI 工具** in the catalog. The tool returns whether the catalog opened. Read the inventory again to check whether the user added the plugin.
 
+To use Antigravity in the AI Tool, install `agy` 1.5.3 or later, sign in from the terminal, then select **Antigravity** in **AI 设置**. Antigravity receives the live project tool inventory through the authenticated per-turn MCP server. Use the same capability checks and editor operations as other engines. Page delegation requires an engine whose live inventory includes the delegation tools.
+
 Inside the AI Tool, users can configure a trusted custom engine. It receives its per-turn inventory in the `start` frame. Use the supplied live tools and wait for each `tool_result`. The host applies project, permission, cancellation and undo rules. Page delegation is available when the inventory includes the delegation tools.
 
 The host queues user submissions made with Send or Enter. A user can steer a running turn from the queued message's **引导对话** control. The host removes that entry when the engine acknowledges receipt.

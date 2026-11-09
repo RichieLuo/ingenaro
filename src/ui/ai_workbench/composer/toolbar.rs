@@ -29,6 +29,7 @@ impl App {
             .map(|engine| match engine.kind {
                 ai::EngineKind::Claude => "Claude",
                 ai::EngineKind::Codex => "Codex",
+                ai::EngineKind::Antigravity => "Antigravity",
                 ai::EngineKind::OpenAiCompatible => "API",
                 ai::EngineKind::Plugin => &engine.name,
             })

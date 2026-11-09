@@ -1,4 +1,5 @@
 //! Reusable AI engines. The host owns document operations, permissions and credentials.
+mod antigravity;
 mod api;
 mod attachments;
 pub use attachments::{

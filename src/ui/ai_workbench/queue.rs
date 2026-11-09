@@ -372,7 +372,7 @@ impl App {
                                         );
                                         let response = ui.add_enabled(
                                             self.ai.running.is_some()
-                                                && item.engine.kind != ai::EngineKind::Plugin
+                                                && item.engine.kind.supports_steering()
                                                 && self.ai.steering.is_none()
                                                 && !self.ai.page_agents.has_active()
                                                 && item.reference_files.is_empty(),

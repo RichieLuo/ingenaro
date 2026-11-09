@@ -32,6 +32,12 @@ pub(super) fn paint(p: &egui::Painter, rect: Rect, kind: ai::EngineKind) {
             p.line_segment([at(-2.0, 0.0), at(-6.0, 4.0)], stroke);
             p.line_segment([at(1.0, 4.0), at(6.0, 4.0)], stroke);
         }
+        ai::EngineKind::Antigravity => {
+            let stroke = Stroke::new(2.2 * scale, Color32::from_rgb(66, 111, 225));
+            p.line_segment([at(-9.0, 7.0), at(0.0, -8.0)], stroke);
+            p.line_segment([at(0.0, -8.0), at(9.0, 7.0)], stroke);
+            p.line_segment([at(-5.5, 1.0), at(5.5, 1.0)], stroke);
+        }
         _ => {
             p.circle_stroke(c, 8.0 * scale, Stroke::new(scale, MUTED));
         }

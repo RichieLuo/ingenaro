@@ -10,6 +10,10 @@
 
 The Ingenaro adapter is in [src/ai.rs](../../src/ai.rs). Run `cargo test -p ai-design-runtime --locked` from the workspace to test the package independently.
 
+## Bundled Antigravity CLI engine
+
+Install `agy` 1.5.3 or later and sign in by running `agy` in a terminal. The workbench discovers it alongside Claude Code and Codex. It uses the CLI's ACP interface for model discovery, image prompts, streaming and conversation resume. Design turns use the host's authenticated loopback MCP endpoint and the existing project permissions and undo. Page delegation is available through Claude Code and Codex.
+
 ## Executable engine protocol v1
 
 In the Ingenaro toolbar, open **添加插件** and add **AI 工具**. Inside that tool, open **AI 设置 → 添加自定义引擎…** and select a trusted local executable. Windows accepts `.exe`. All platforms also accept `.mjs` with Node.js on PATH. The host stores the selection in its own settings and launches the plugin when the user sends a turn. Removing the configuration leaves the file on disk.

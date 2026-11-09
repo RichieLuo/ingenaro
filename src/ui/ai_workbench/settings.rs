@@ -91,6 +91,7 @@ impl App {
                         for (kind, name) in [
                             (ai::EngineKind::Claude, "Claude Code"),
                             (ai::EngineKind::Codex, "Codex"),
+                            (ai::EngineKind::Antigravity, "Antigravity"),
                         ] {
                             if ui.button(format!("手动添加 {name}")).clicked() {
                                 self.ai.settings.engines.push(ai::EngineConfig::new(kind));
@@ -117,6 +118,7 @@ impl App {
                         let name = match engine.kind {
                             ai::EngineKind::Claude => "Claude Code",
                             ai::EngineKind::Codex => "Codex",
+                            ai::EngineKind::Antigravity => "Antigravity",
                             _ => &engine.name,
                         };
                         let status = self.ai.local_status.get(id);
@@ -202,10 +204,10 @@ impl App {
                     }
                     ui.horizontal(|ui| {
                         engine_icons::inline(ui, engine.kind, 24.0);
-                        ui.heading(if engine.kind == ai::EngineKind::Claude {
-                            "Claude Code"
-                        } else {
-                            "Codex"
+                        ui.heading(match engine.kind {
+                            ai::EngineKind::Claude => "Claude Code",
+                            ai::EngineKind::Codex => "Codex",
+                            _ => &engine.name,
                         });
                     });
                     if let Some(status) = self.ai.local_status.get(&id) {

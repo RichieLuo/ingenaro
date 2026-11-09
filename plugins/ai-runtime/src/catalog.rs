@@ -37,12 +37,13 @@ pub struct LocalEngineInfo {
 }
 
 pub fn is_local(kind: EngineKind) -> bool {
-    matches!(kind, EngineKind::Claude | EngineKind::Codex)
+    kind.supports_page_delegation() || kind == EngineKind::Antigravity
 }
 pub fn local_defaults() -> Vec<EngineConfig> {
     vec![
         EngineConfig::new(EngineKind::Claude),
         EngineConfig::new(EngineKind::Codex),
+        EngineConfig::new(EngineKind::Antigravity),
     ]
 }
 pub fn discover_local_engines() -> Vec<LocalEngineInfo> {
@@ -65,7 +66,10 @@ pub fn discover_local_engines() -> Vec<LocalEngineInfo> {
 
 pub fn discover_models(config: &EngineConfig) -> Result<ModelCatalog, String> {
     if !is_local(config.kind) {
-        return Err("当前只支持 Claude Code 和 Codex 本地工具".into());
+        return Err("当前引擎不支持本机模型发现".into());
+    }
+    if config.kind == EngineKind::Antigravity {
+        return super::antigravity::discover_models(config);
     }
     let directory = std::env::temp_dir().join(format!("ai-model-catalog-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&directory).map_err(|_| "无法创建模型目录检查工作区")?;
@@ -381,9 +385,9 @@ mod tests {
         );
     }
     #[test]
-    fn only_two_local_tools_have_defaults() {
+    fn bundled_local_engines_have_defaults() {
         let configs = local_defaults();
-        assert_eq!(configs.len(), 2);
+        assert_eq!(configs.len(), 3);
         assert!(configs.iter().all(|c| is_local(c.kind)));
     }
 }
